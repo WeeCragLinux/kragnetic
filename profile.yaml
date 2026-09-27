@@ -10,9 +10,10 @@ enabled_modules:
   - session
   - greeter
   - system
-  # Terra repo (Fyra Labs). Kept after the modules whose packages already
-  # resolve against the base image, so enabling Terra can't shadow them.
-  - terra
+  # Terra repo (Fyra Labs). Disabled by default; uncomment to enable. Kept after
+  # the modules whose packages already resolve against the base image, so
+  # enabling Terra can't shadow them.
+  # - terra
   # Persistent /usr overlay + kinpkg (RakuOS-style); must run last, after the
   # files/ tree is copied into the image (installs the dnf shim over Atomic's).
   - overlay
@@ -20,7 +21,8 @@ enabled_modules:
 # usr-overlay manifest: packages installed live into the persistent /usr
 # overlay, managed by `dcli-bootc overlay import`/`sync`. NOT in enabled_modules
 # (its packages belong in the overlay, not the image). The `overlay` module
-# above is the infra (mount unit + kinpkg) and stays enabled.
+# above is the infra (mount unit + kinpkg) and stays enabled. Ships empty so
+# each user runs `dcli-bootc overlay import` to snapshot their own packages.
 overlay_module: overlay-packages
 overlay_backend: kinpkg
 

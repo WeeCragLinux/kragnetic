@@ -1,0 +1,8 @@
+description: System tools baked into image
+packages:
+  - dcli-bootc
+repos:
+  copr:
+    - theblackdon/dcli-bootc
+services:
+  - bootc-fetch-apply-updates.timer

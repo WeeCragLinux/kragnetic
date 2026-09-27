@@ -1,0 +1,17 @@
+# dcli-bootc generated files
+Containerfile
+build.sh
+build_files/
+
+# RPMs and AppImages
+*.rpm
+*.AppImage
+*.appimage
+
+# Build artifacts
+*.tar
+*.tar.gz
+*.tar.xz
+
+# Container storage
+output/

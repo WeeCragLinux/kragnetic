@@ -1,0 +1,29 @@
+description: Noctalia greeter (greetd) - pre-configured
+packages:
+  - greetd
+scripts:
+  post: |
+    # Pre-configure greetd to run the Noctalia greeter directly (no interactive
+    # kineticwe-setup-greeter step needed).
+    mkdir -p /etc/greetd
+    cat > /etc/greetd/config.toml << 'EOF'
+    [terminal]
+    vt = 1
+
+    [default_session]
+    command = "/usr/bin/noctalia-greeter-session"
+    user = "greetd"
+    EOF
+
+    # Fedora's greetd package creates the "greetd" session account; make sure it
+    # exists and has GPU/input access for the greeter compositor.
+    if ! id greetd &>/dev/null; then
+      useradd -r -s /usr/sbin/nologin -d /var/lib/noctalia-greeter greetd || true
+    fi
+    usermod -a -G video,input greetd 2>/dev/null || true
+
+    # greetd.service has no Alias=display-manager.service on Fedora, so create
+    # the symlink ourselves or graphical.target never starts the greeter.
+    systemctl enable greetd.service
+    ln -sf /usr/lib/systemd/system/greetd.service /etc/systemd/system/display-manager.service
+    systemctl set-default graphical.target

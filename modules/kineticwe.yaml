@@ -1,0 +1,7 @@
+description: KineticWE compositor + Noctalia greeter
+repos:
+  copr:
+    - linuxgamerlife/lgl-experimental
+packages:
+  - kineticwe
+  - kineticwe-greeter

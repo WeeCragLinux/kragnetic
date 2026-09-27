@@ -1,0 +1,89 @@
+description: Remove Bazzite gaming apps, KDE desktop, and unwanted packages
+remove:
+  # Bazzite gaming apps (not needed for KineticWE)
+  - lutris
+  - waydroid
+  - waydroid-selinux
+  - input-remapper
+  # Bazzite-specific tools
+  - uupd
+  - topgrade
+  - bazzite-portal
+  # Bazaar storefront + KRunner plugin
+  - bazaar
+  - krunner-bazaar
+  # KDE Connect
+  - kde-connect
+  - kdeconnectd
+  - kde-connect-libs
+  # ROM Properties
+  - rom-propertiesi
+  - rom-properties-common
+  - rom-properties-kf6
+  - rom-properties-utils
+  # Mariadb (not needed)
+  - mariadb
+  - mariadb-server
+  - mariadb-common
+  - mariadb-errmsg
+  - mariadb-connector-c
+  - mariadb-connector-c-config
+  - mariadb-backup
+  - mariadb-cracklib-password-check
+  - mariadb-gssapi-server
+  # KDE Plasma Desktop (replaced by KineticWE)
+  - plasma-desktop
+  - plasma-workspace
+  - plasma-shell
+  - plasma-kwin_x11
+  - kwin
+  - kwin-x11
+  - kwin-wayland
+  - plasma-systemmonitor
+  - plasma-nano
+  - plasma-bigscreen
+  - plasma-browser-integration
+  - plasma-discover
+  - plasma-discover-flatpak
+  - plasma-pass
+  - plasma-pa
+  - plasma-desktoptheme
+  - sddm
+  - sddm-kcm
+  # KDE Apps (not needed)
+  - dolphin
+  - konsole
+  - kate
+  - ark
+  - gwenview
+  - elisa
+  - okular
+  - kalarm
+  - kolourpaint
+  - krecorder
+  - kmail
+  - neochat
+  # KDE Settings Modules
+  - kcmshell
+  - systemsettings
+  # Breeze theme (KineticWE has its own)
+  - plasma-breeze
+  - breeze-gtk
+scripts:
+  pre: |
+    # Clean up leftover Bazzite/KDE files
+    rm -f /usr/share/applications/waydroid-container-restart.desktop
+    rm -f /usr/libexec/waydroid-container-restart \
+          /usr/libexec/waydroid-container-start \
+          /usr/libexec/waydroid-container-stop \
+          /usr/libexec/waydroid-fix-controllers
+    rm -rf /usr/share/applications/Waydroid
+    rm -f /usr/share/applications/discourse.desktop
+    rm -f /usr/share/applications/bazzite-documentation.desktop
+    rm -f /usr/share/applications/system-update.desktop
+    # Remove KDE desktop entries
+    rm -f /usr/share/applications/kde-*.desktop
+    rm -f /usr/share/applications/org.kde.*.desktop
+    # Remove SDDM config
+    rm -rf /etc/sddm.conf.d
+    rm -f /etc/sddm.conf

@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# kinpkg — install/remove native RPMs into kineticos's persistent /usr overlay.
+#
+# Packages installed this way live in /var/lib/kineticos/overlay/upper and
+# survive reboots and image updates. They SHADOW the base image (no atomicity
+# for them) — keep anything you want reproducible in modules/*.yaml instead.
+#
+# Repo packages are recorded in installed.txt; locally-sideloaded .rpm files
+# are staged under local-rpms/ and recorded in installed-rpm.txt, so
+# `dcli-bootc overlay` can reconcile the live overlay against a module.
+#
+# Kernel, GPU driver and other core system packages are blocked: those are
+# owned by the image build (akmods/nvidia are baked into bazzite) and
+# shadowing them from the overlay will break bootc updates and rollback.
+
+set -euo pipefail
+
+OVERLAY_BASE=/var/lib/kineticos/overlay
+RECORD="$OVERLAY_BASE/installed.txt"
+RPM_RECORD="$OVERLAY_BASE/installed-rpm.txt"
+LOCAL_DIR="$OVERLAY_BASE/local-rpms"
+
+# Prefix match on package name (kernel* also covers kernel-core, -devel, ...)
+BLOCKED_PREFIXES=(
+    kernel akmods akmod nvidia kmod bazzite
+    ostree bootc rpm-ostree
+    glibc filesystem systemd dbus selinux-policy
+)
+
+usage() {
+    cat <<'EOF'
+kinpkg — native RPMs into the persistent /usr overlay
+(also available as 'ki')
+
+  kinpkg install PKG...    install package(s) into the overlay
+  kinpkg install FILE.rpm  install local .rpm file(s) into the overlay
+  kinpkg remove PKG...     remove package(s) from the overlay
+  kinpkg upgrade           upgrade overlay-installed packages
+  kinpkg sync              distro-sync overlay packages against the new base
+  kinpkg list              list packages installed via kinpkg
+  kinpkg search ARGS...    search dnf repos (read-only)
+
+Options:
+  -y, --yes, --assumeyes   skip dnf's confirmation prompt (accept all)
+
+Notes:
+  * Without -y every install/remove/upgrade asks dnf for confirmation, like a
+    normal dnf transaction. dcli-bootc passes -y after its own approval.
+  * Overlay packages survive `dcli-bootc update` but are NOT atomic: they
+    shadow the base image and are shared across rollbacks.
+  * kernel/nvidia/akmods/bazzite packages are blocked — bake those into the
+    image via modules/*.yaml instead.
+  * Disable the overlay entirely: touch /var/lib/kineticos/overlay/disabled
+EOF
+}
+
+die() { echo "kinpkg: $*" >&2; exit 1; }
+
+# The overlay must actually be mounted, otherwise dnf would edit the real,
+# read-only /usr (and fail) or — worse on a writable mount — corrupt it.
+require_overlay() {
+    local fstype
+    fstype="$(findmnt -nro FSTYPE /usr 2>/dev/null || true)"
+    [[ "$fstype" == "overlay" ]] || die "/usr overlay is not mounted. Run: sudo systemctl start kineticos-overlay-mount.service"
+}
+
+# Prefer the real dnf5 binary; avoids the Atomic 'dnf' warning shim.
+if [[ -x /usr/bin/dnf5 ]]; then
+    DNF=/usr/bin/dnf5
+else
+    DNF=/usr/bin/dnf
+fi
+
+check_blocked() {
+    local spec prefix
+    for spec in "$@"; do
+        for prefix in "${BLOCKED_PREFIXES[@]}"; do
+            if [[ "$spec" == "$prefix"* ]]; then
+                die "'$spec' is managed by the image build (modules/*.yaml) and must not be installed into the overlay"
+            fi
+        done
+    done
+}
+
+# record FILE PKG...  (append names not already present)
+record() {
+    local file=$1; shift
+    [[ $# -gt 0 ]] || return 0
+    mkdir -p "$OVERLAY_BASE"
+    local pkg
+    for pkg in "$@"; do
+        grep -qxF "$pkg" "$file" 2>/dev/null || echo "$pkg" >>"$file"
+    done
+}
+
+# unrecord FILE PKG...  (drop names)
+unrecord() {
+    local file=$1; shift
+    [[ $# -gt 0 ]] || return 0
+    [[ -f "$file" ]] || return 0
+    local tmp
+    tmp=$(mktemp)
+    grep -vxFf <(printf '%s\n' "$@") "$file" >"$tmp" || true
+    mv "$tmp" "$file"
+}
+
+# all FILE  (sorted, unique, comments/blanks dropped)
+all() {
+    local file=$1
+    [[ -f "$file" ]] || return 0
+    grep -vE '^[[:space:]]*(#|$)' "$file" | sort -u
+}
+
+overlay_pkgs() { all "$RECORD"; }
+local_pkgs() { all "$RPM_RECORD"; }
+
+# Flags are forwarded to dnf. With no -y/--assumeyes, dnf prompts for
+# confirmation as usual; dcli-bootc passes -y after it has asked the user.
+YES=()
+args=()
+for arg in "$@"; do
+    case "$arg" in
+        -y|--yes|--assumeyes) YES+=(-y) ;;
+        *) args+=("$arg") ;;
+    esac
+done
+set -- "${args[@]}"
+
+[[ ${1:-} ]] || { usage; exit 1; }
+cmd=$1
+shift
+
+case "$cmd" in
+    install|in)
+        [[ $# -gt 0 ]] || die "install: nothing to install"
+        require_overlay
+
+        # Split the arguments into repo specs and local .rpm files.
+        repo_specs=()
+        local_files=()
+        for spec in "$@"; do
+            if [[ "$spec" == *.rpm && -f "$spec" ]]; then
+                local_files+=("$spec")
+            else
+                repo_specs+=("$spec")
+            fi
+        done
+
+        # Repo packages → recorded in installed.txt
+        if [[ ${#repo_specs[@]} -gt 0 ]]; then
+            check_blocked "${repo_specs[@]}"
+            "$DNF" install "${YES[@]}" "${repo_specs[@]}"
+            mapfile -t names < <(rpm -q --qf '%{NAME}\n' -- "${repo_specs[@]}")
+            record "$RECORD" "${names[@]}"
+        fi
+
+        # Local .rpm files → staged copy + recorded in installed-rpm.txt
+        for f in "${local_files[@]}"; do
+            local_name="$(rpm -qp --qf '%{NAME}' "$f")"
+            [[ -n "$local_name" ]] || die "could not read a package name from '$f'"
+            check_blocked "$local_name"
+            "$DNF" install "${YES[@]}" "$f"
+            mkdir -p "$LOCAL_DIR"
+            install -m 0644 "$f" "$LOCAL_DIR/$local_name.rpm"
+            record "$RPM_RECORD" "$local_name"
+        done
+        ;;
+    remove|rm)
+        [[ $# -gt 0 ]] || die "remove: nothing to remove"
+        check_blocked "$@"
+        require_overlay
+        mapfile -t names < <(rpm -q --qf '%{NAME}\n' -- "$@" 2>/dev/null || true)
+        repo_names=()
+        local_names=()
+        for n in "${names[@]}"; do
+            if [[ -f "$RPM_RECORD" ]] && grep -qxF "$n" "$RPM_RECORD"; then
+                local_names+=("$n")
+            else
+                repo_names+=("$n")
+            fi
+        done
+        "$DNF" remove "${YES[@]}" "$@"
+        unrecord "$RECORD" "${repo_names[@]}"
+        for n in "${local_names[@]}"; do
+            rm -f "$LOCAL_DIR/$n.rpm"
+        done
+        unrecord "$RPM_RECORD" "${local_names[@]}"
+        ;;
+    upgrade|update)
+        require_overlay
+        mapfile -t pkgs < <(overlay_pkgs)
+        [[ ${#pkgs[@]} -gt 0 ]] || { echo "kinpkg: no overlay packages to upgrade — use 'dcli-bootc update' for system image updates"; exit 0; }
+        "$DNF" upgrade "${YES[@]}" -- "${pkgs[@]}"
+        ;;
+    sync)
+        require_overlay
+        mapfile -t pkgs < <(overlay_pkgs)
+        [[ ${#pkgs[@]} -gt 0 ]] || { echo "kinpkg: no overlay packages to sync — use 'dcli-bootc update' for system image updates"; exit 0; }
+        "$DNF" distro-sync "${YES[@]}" -- "${pkgs[@]}"
+        ;;
+    list)
+        overlay_pkgs || true
+        local_pkgs || true
+        ;;
+    search|info)
+        exec "$DNF" "$cmd" "$@"
+        ;;
+    help|-h|--help)
+        usage
+        ;;
+    *)
+        usage
+        die "unknown command: $cmd"
+        ;;
+esac

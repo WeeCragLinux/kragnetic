@@ -1,0 +1,20 @@
+[Unit]
+Description=kineticos persistent overlay on /usr
+Documentation=https://gitlab.com/theblackdon/kineticos
+# Runs very early so every later service sees the overlaid /usr (incl. the
+# rpmdb in /usr/share/rpm). Must not carry default dependencies (those would
+# pull it after basic.target).
+DefaultDependencies=no
+# /var must be usable (and on ostree, remounted rw via ostree-remount) before
+# we can create/mount the persistent upperdir.
+After=systemd-remount-fs.service ostree-remount.service
+RequiresMountsFor=/var/lib/kineticos/overlay
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kineticos-overlay-mount
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

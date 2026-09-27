@@ -1,0 +1,11 @@
+description: Terra repo (Fyra Labs) — Bazzite ships Terra disabled; enable it
+repos:
+  # Bazzite already installs terra.repo / terra-extras.repo but leaves them
+  # disabled. dcli-bootc's `enable` emits:
+  #   sed -i 's/enabled=0/enabled=1/' /etc/yum.repos.d/<name>.repo
+  # (Do NOT use `dnf install --repofrompath 'terra,...'` here — Bazzite already
+  # defines a repo with id "terra", and dnf5 fails with "Id is present more than
+  # once in the configuration".)
+  enable:
+    - terra
+    - terra-extras

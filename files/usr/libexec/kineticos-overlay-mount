@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# kineticos-overlay-mount — mount a persistent overlayfs on /usr (RakuOS-style).
+#
+# lowerdir = the immutable, bootc/ostree-deployed /usr of the booted image
+# upperdir = /var/lib/kineticos/overlay/upper  (persistent, survives reboots
+#            and image updates — everything dnf writes to /usr lands here)
+#
+# Disable without rebuilding: touch /var/lib/kineticos/overlay/disabled
+set -euo pipefail
+
+BASE=/var/lib/kineticos/overlay
+UPPER="$BASE/upper"
+WORK="$BASE/work"
+
+log() { echo "kineticos overlay: $*"; }
+
+# Opt-out switch
+if [[ -e "$BASE/disabled" ]]; then
+    log "disabled flag present — skipping"
+    exit 0
+fi
+
+# Not a booted Atomic system (e.g. running inside a container): nothing to do
+if [[ ! -e /run/ostree-booted ]]; then
+    log "not an ostree/bootc boot — skipping"
+    exit 0
+fi
+
+# Idempotence: already mounted (e.g. unit re-triggered after daemon-reload)
+if [[ "$(findmnt -nro FSTYPE /usr 2>/dev/null || true)" == "overlay" ]]; then
+    log "/usr overlay already mounted"
+    exit 0
+fi
+
+mkdir -p "$UPPER" "$WORK"
+chmod 700 "$BASE"
+
+first_run=false
+if [[ ! -f "$UPPER/.kineticos-overlay-initialised" ]]; then
+    first_run=true
+fi
+
+# SELinux: label the persistent upperdir contents. Needed on first run, and
+# manually afterwards (touch /var/lib/kineticos/overlay/relabel) e.g. after a
+# major SELinux policy update. Files created *through* the overlay get correct
+# labels from the kernel, so this doesn't need to run every boot.
+if [[ -x /usr/sbin/restorecon && ( $first_run == true || -e "$BASE/relabel" ) ]]; then
+    restorecon -RF "$BASE" || log "WARNING: restorecon failed — SELinux denials possible"
+    rm -f "$BASE/relabel"
+fi
+
+mount -t overlay kineticos-overlay /usr \
+    -o "lowerdir=/usr,upperdir=$UPPER,workdir=$WORK"
+
+if $first_run; then
+    touch "$UPPER/.kineticos-overlay-initialised"
+    log "first run — persistent overlay created at $BASE"
+fi
+
+log "/usr overlay mounted (upperdir: $UPPER)"

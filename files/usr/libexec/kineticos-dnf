@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# kineticos-dnf — replaces the Atomic/Bazzite /usr/bin/dnf shim (installed over
+# it by the overlay module, which runs last so the image build's own dnf calls
+# are unaffected).
+#
+# On kineticos, /usr is a persistent overlay, so native dnf works. Mutating
+# commands (install/remove/upgrade) are routed through kinpkg for its
+# guardrails (no kernel/nvidia/base packages into the overlay) and its record
+# of overlay-installed packages (used by `kinpkg upgrade` / `kinpkg sync`).
+# Everything else — search, info, clean, repo queries — goes straight to dnf5.
+#
+# Power users who want zero guardrails can call /usr/bin/dnf5 directly.
+
+case "${1:-}" in
+    install|in|remove|rm|upgrade|up|update)
+        exec /usr/bin/kinpkg "$@"
+        ;;
+    *)
+        exec /usr/bin/dnf5 "$@"
+        ;;
+esac

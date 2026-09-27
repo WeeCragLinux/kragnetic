@@ -1,0 +1,10 @@
+description: Persistent /usr overlay (RakuOS-style) — dnf/kinpkg installs survive updates
+files:
+  - etc
+  - usr
+scripts:
+  post: |
+    # Enable the /usr overlay mount unit
+    systemctl enable kineticos-overlay-mount.service
+    # Replace the Atomic dnf shim (runs last, after all build-time dnf usage)
+    install -m 0755 /usr/libexec/kineticos-dnf /usr/bin/dnf

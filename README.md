@@ -81,6 +81,7 @@ KineticOS/
 │   ├── greeter.yaml    # greetd login manager
 │   ├── system.yaml     # dcli-bootc
 │   ├── terra.yaml      # Terra repo (Fyra Labs)
+│   ├── rpmfusion.yaml  # RPM Fusion free + nonfree repos
 │   └── overlay.yaml    # Persistent /usr overlay + kinpkg
 ├── files/              # Custom files (overlay helpers live here)
 ├── rpms/               # Local RPMs (empty)
@@ -126,7 +127,12 @@ Disable the overlay: `sudo touch /var/lib/kineticos/overlay/disabled && reboot`.
 - `linuxgamerlife/lgl-experimental` - KineticWE packages
 - `theblackdon/dcli-bootc` - Build tool
 
-## Terra Repository
+## Repository Modules
+
+Both repo modules below ship **disabled** by default. Uncomment the matching
+entry in `enabled_modules` (`profile.yaml`) to turn one on.
+
+### Terra Repository
 
 Bazzite ships the [Terra](https://terra.fyralabs.com) repository (Fyra Labs) as
 `/etc/yum.repos.d/terra.repo` and `terra-extras.repo`, but **disabled**. The
@@ -162,3 +168,28 @@ package modules, so turning Terra on can't shadow their base-image packages;
 add Terra packages to `modules/system.yaml`, or to any module listed after
 `terra` in `profile.yaml`. To let Terra-provided packages override base ones,
 move `terra` earlier in `enabled_modules`.
+
+### RPM Fusion Repository
+
+Bazzite doesn't ship [RPM Fusion](https://rpmfusion.org); the `rpmfusion` module
+installs the official free + nonfree release RPMs, which carry both the repo
+definitions and the GPG keys:
+
+```yaml
+remote_rpms:
+  - url: https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+    filename: rpmfusion-free-release.noarch.rpm
+  - url: https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+    filename: rpmfusion-nonfree-release.noarch.rpm
+```
+
+Using the release RPMs is the official method (better than hand-writing repo
+files), and `$(rpm -E %fedora)` keeps the URLs correct across Fedora releases.
+Enable it in `profile.yaml` alongside the other repo modules:
+
+```yaml
+enabled_modules:
+  # ...
+  # - rpmfusion
+  - overlay
+```

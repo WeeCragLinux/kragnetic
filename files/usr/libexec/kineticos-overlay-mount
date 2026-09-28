@@ -14,6 +14,64 @@ WORK="$BASE/work"
 
 log() { echo "kineticos overlay: $*"; }
 
+# ── Reconcile the persistent rpmdb with the booted base image ──
+# /usr is an overlay, so the first rpm/dnf write copies the whole
+# /usr/share/rpm/rpmdb.sqlite into the upperdir. That copy then shadows the
+# base image's rpmdb permanently: when a later image build removes a package,
+# the upper copy keeps a "ghost" entry (rpm -q says installed, the files are
+# gone), and packages the image adds stay invisible. Ghosts make
+# `dcli-bootc overlay import` snapshot packages the image explicitly removed.
+#
+# This runs before the mount, while /usr is still the immutable lower layer, so
+# the fresh base package list can be read. It drops only entries that are
+# neither provided by the current base nor recorded by kinpkg as genuine
+# overlay installs; a recorded overlay package is never touched.
+reconcile_persistent_rpmdb() {
+    local dbpath="$UPPER/usr/share/rpm"
+    local base_list=/usr/share/dcli-bootc/base-packages.list
+    [[ -f "$base_list" && -f "$dbpath/rpmdb.sqlite" ]] || return 0
+    # Without kinpkg's records we can't tell a ghost from an unrecorded install.
+    [[ -f "$BASE/installed.txt" || -f "$BASE/installed-rpm.txt" ]] || return 0
+
+    # Skip unless the base image's package set changed since the last reconcile.
+    local want stamp="$BASE/.rpmdb-base"
+    want="$(sha256sum "$base_list" | cut -d' ' -f1)"
+    [[ "$(cat "$stamp" 2>/dev/null || true)" == "$want" ]] && return 0
+
+    local tmp
+    tmp="$(mktemp -d "$BASE/rpmdb-reconcile.XXXXXX")" || return 0
+    if ! rpm -qa --dbpath "$dbpath" --qf '%{NAME}\n' 2>/dev/null | sort -u > "$tmp/have"; then
+        log "WARNING: could not read the persistent rpmdb — leaving it as-is"
+        rm -rf "$tmp"
+        return 0
+    fi
+    sort -u "$base_list" > "$tmp/base"
+    # `cat` exits non-zero when one of the two record files is absent, so build
+    # the list explicitly rather than letting `pipefail` abort the boot script.
+    {
+        [[ -f "$BASE/installed.txt" ]] && cat "$BASE/installed.txt"
+        [[ -f "$BASE/installed-rpm.txt" ]] && cat "$BASE/installed-rpm.txt"
+        true
+    } | sort -u > "$tmp/rec"
+    # Ghosts: known to the stale db, not provided by the current base, and not a
+    # recorded overlay install.
+    if ! comm -23 "$tmp/have" "$tmp/base" | comm -23 - "$tmp/rec" > "$tmp/ghosts"; then
+        log "WARNING: rpmdb reconciliation failed — leaving it as-is"
+        rm -rf "$tmp"
+        return 0
+    fi
+    if [[ -s "$tmp/ghosts" ]]; then
+        log "reconciling persistent rpmdb with the base image ($(wc -l < "$tmp/ghosts") ghost package(s)): $(tr '\n' ' ' < "$tmp/ghosts")"
+        if ! xargs -r rpm -e --dbpath "$dbpath" --justdb --nodeps -- < "$tmp/ghosts"; then
+            log "WARNING: rpmdb reconciliation failed — leaving it as-is"
+            rm -rf "$tmp"
+            return 0
+        fi
+    fi
+    rm -rf "$tmp"
+    echo "$want" > "$stamp"
+}
+
 # Opt-out switch
 if [[ -e "$BASE/disabled" ]]; then
     log "disabled flag present — skipping"
@@ -48,6 +106,9 @@ if [[ -x /usr/sbin/restorecon && ( $first_run == true || -e "$BASE/relabel" ) ]]
     restorecon -RF "$BASE" || log "WARNING: restorecon failed — SELinux denials possible"
     rm -f "$BASE/relabel"
 fi
+
+# Never let reconciliation failure block the overlay mount.
+reconcile_persistent_rpmdb || log "WARNING: rpmdb reconciliation failed — continuing without it"
 
 mount -t overlay kineticos-overlay /usr \
     -o "lowerdir=/usr,upperdir=$UPPER,workdir=$WORK"

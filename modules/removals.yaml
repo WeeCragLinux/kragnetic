@@ -5,6 +5,7 @@ remove:
   - waydroid
   - waydroid-selinux
   - input-remapper
+  - cardwire
   # Bazzite-specific tools
   - uupd
   - topgrade
@@ -51,9 +52,6 @@ remove:
   - sddm
   - sddm-kcm
   # KDE Apps (not needed)
-  - dolphin
-  - konsole
-  - kate
   - ark
   - gwenview
   - elisa
@@ -67,10 +65,29 @@ remove:
   - neochat
   # KDE Settings Modules
   - kcmshell
-  - systemsettings
+  - plasma-systemsettings
   # Breeze theme (KineticWE has its own)
   - plasma-breeze
   - breeze-gtk
+# Bazzite's installer preinstalls these Flatpaks system-wide. They live in
+# /var/lib/flatpak (runtime state, not image content), so they can't be removed
+# at build time: this unit strips them on boot and records each app in the
+# stamp, so anything the user installs later is left alone.
+first_boot_services:
+  - name: kineticos-flatpak-removals.service
+    condition_path: /var/lib/kineticos/flatpak-removals.done
+    unit_content: |
+      [Unit]
+      Description=Remove unwanted Bazzite system Flatpaks (once per app)
+      ConditionPathExists=/usr/bin/flatpak
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/libexec/kineticos-remove-flatpaks
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
 scripts:
   pre: |
     # Clean up leftover Bazzite/KDE files
@@ -83,9 +100,41 @@ scripts:
     rm -f /usr/share/applications/discourse.desktop
     rm -f /usr/share/applications/bazzite-documentation.desktop
     rm -f /usr/share/applications/system-update.desktop
-    # Remove KDE desktop entries
+    # Remove KDE desktop entries, but keep Spectacle's. Its
+    # /usr/share/kglobalaccel/org.kde.spectacle.desktop entry is a symlink to
+    # /usr/share/applications/org.kde.spectacle.desktop, and the embedded
+    # kglobalaccel discovers Spectacle's global shortcuts by reading that file.
+    # Deleting it leaves a dangling symlink, so the Spectacle component never
+    # appears in Kinetic Settings -> Keybinds.
     rm -f /usr/share/applications/kde-*.desktop
-    rm -f /usr/share/applications/org.kde.*.desktop
+    find /usr/share/applications -maxdepth 1 -name 'org.kde.*.desktop' \
+        ! -name 'org.kde.spectacle.desktop' -delete
     # Remove SDDM config
     rm -rf /etc/sddm.conf.d
     rm -f /etc/sddm.conf
+  post: |
+    # Per-app Flatpak removal helper for kineticos-flatpak-removals.service.
+    # Each app is removed at most once: once processed it is recorded in the
+    # stamp, so a Flatpak the user installs later is left alone, while an app
+    # added to this list later still gets removed on the next boot. A missing
+    # app is stamped too, so fresh installs never re-remove user installs.
+    install -Dm0755 /dev/stdin /usr/libexec/kineticos-remove-flatpaks << 'EOF'
+    #!/usr/bin/bash
+    set -u
+    install -d /var/lib/kineticos
+    stamp=/var/lib/kineticos/flatpak-removals.done
+    touch "$stamp"
+    for app in \
+        io.github.DenysMb.Kontainer \
+        com.github.Matoking.protontricks \
+        org.kde.kcalc \
+        org.kde.okular \
+        org.mozilla.firefox \
+        org.kde.haruna \
+        org.kde.gwenview
+    do
+        grep -qxF "$app" "$stamp" && continue
+        flatpak uninstall -y --system --noninteractive "$app" >/dev/null 2>&1 || true
+        echo "$app" >> "$stamp"
+    done
+    EOF

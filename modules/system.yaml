@@ -2,7 +2,6 @@ description: System tools baked into image
 packages:
   - dcli-bootc
   - nodejs24
-  - kitty
 repos:
   copr:
     - theblackdon/dcli-bootc

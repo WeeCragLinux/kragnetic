@@ -5,3 +5,6 @@ repos:
 packages:
   - kineticwe
   - kineticwe-greeter
+  # KWE Related Packages
+  - spectacle
+  - dolphin

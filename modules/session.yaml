@@ -2,7 +2,10 @@ description: Session packages for KineticWE desktop
 packages:
   # Qt5 theming (qt6ct/qttools already in Bazzite)
   - qt5ct
+  - qt6ct
   # Terminal
   - alacritty
   # User directories
   - xdg-user-dirs
+  # CLI
+  - eza

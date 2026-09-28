@@ -6,5 +6,10 @@ scripts:
   post: |
     # Enable the /usr overlay mount unit
     systemctl enable kineticos-overlay-mount.service
-    # Replace the Atomic dnf shim (runs last, after all build-time dnf usage)
+    # Install the dnf guard over /usr/bin/dnf and /usr/bin/dnf5 (runs last,
+    # after all build-time dnf usage). yum/microdnf are symlinks to dnf5, so
+    # they are covered too. Stash the real dnf5 in /usr/libexec first: both the
+    # guard and kinpkg call it there.
+    install -m 0755 /usr/bin/dnf5 /usr/libexec/dnf5
+    install -m 0755 /usr/libexec/kineticos-dnf /usr/bin/dnf5
     install -m 0755 /usr/libexec/kineticos-dnf /usr/bin/dnf

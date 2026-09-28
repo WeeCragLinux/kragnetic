@@ -64,8 +64,13 @@ require_overlay() {
     [[ "$fstype" == "overlay" ]] || die "/usr overlay is not mounted. Run: sudo systemctl start kineticos-overlay-mount.service"
 }
 
-# Prefer the real dnf5 binary; avoids the Atomic 'dnf' warning shim.
-if [[ -x /usr/bin/dnf5 ]]; then
+# Prefer the real dnf5 binary. The kineticos-dnf guard lives at
+# /usr/bin/dnf5 and /usr/bin/dnf; kinpkg is the tool that guard points users
+# at, so it must bypass the guard and call the real binary the overlay module
+# stashed in /usr/libexec.
+if [[ -x /usr/libexec/dnf5 ]]; then
+    DNF=/usr/libexec/dnf5
+elif [[ -x /usr/bin/dnf5 ]]; then
     DNF=/usr/bin/dnf5
 else
     DNF=/usr/bin/dnf

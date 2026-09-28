@@ -111,9 +111,13 @@ Installs, removals and upgrades ask `dnf` for confirmation, just like a normal
 then passes `-y` to `kinpkg` for its automated sync/upgrade.
 
 Plain `dnf` works too: the Atomic shim that errors on `dnf install` is replaced
-(in the overlay module) with a wrapper that routes install/remove/upgrade
-through `kinpkg` and everything else straight to `dnf5`. Want zero guardrails?
-Call `/usr/bin/dnf5` directly.
+(in the overlay module) with a guard. `install`/`remove` are routed through
+`kinpkg`; every other mutating operation (`upgrade`, `downgrade`,
+`distro-sync`, `reinstall`, `swap`, `autoremove`, `group install`, …) is
+**refused** — it would write into the overlay, shadow the image and break
+rollbacks — and points you at `dcli-bootc update` / `dcli-bootc overlay sync`.
+Read-only commands go to the real dnf5 at `/usr/libexec/dnf5`. The guard covers
+`dnf5`, `yum` and `microdnf` too, so there is no unguarded dnf path.
 
 Prefer keeping packages you actually care about in `modules/*.yaml` — overlay
 packages shadow the base image, are **not atomic**, and are shared across

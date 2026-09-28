@@ -1,21 +1,145 @@
 #!/usr/bin/env bash
-# kineticos-dnf — replaces the Atomic/Bazzite /usr/bin/dnf shim (installed over
-# it by the overlay module, which runs last so the image build's own dnf calls
-# are unaffected).
+# kineticos-dnf — the dnf entry point on kineticos.
 #
-# On kineticos, /usr is a persistent overlay, so native dnf works. Mutating
-# commands (install/remove/upgrade) are routed through kinpkg for its
-# guardrails (no kernel/nvidia/base packages into the overlay) and its record
-# of overlay-installed packages (used by `kinpkg upgrade` / `kinpkg sync`).
-# Everything else — search, info, clean, repo queries — goes straight to dnf5.
+# Installed over /usr/bin/dnf AND /usr/bin/dnf5 by the `overlay` module (which
+# runs last, after all build-time dnf usage). /usr/bin/yum and /usr/bin/microdnf
+# are symlinks to /usr/bin/dnf5, so they land here too. The real dnf5 binary is
+# copied to /usr/libexec/dnf5.
 #
-# Power users who want zero guardrails can call /usr/bin/dnf5 directly.
+# Every mutation of the persistent /usr overlay is funnelled through kinpkg, or
+# refused. A plain `dnf upgrade`/`autoremove` writes into the overlay's upperdir,
+# shadowing the image, surviving reboots, and silently defeating bootc's
+# atomicity.
+#
+# Behaviour:
+#   * install / remove                                    -> kinpkg
+#     (its base-package guardrails and its record of overlay packages)
+#   * upgrade / downgrade / distro-sync / reinstall /
+#     swap / autoremove / system-level verbs             -> refused (exit 1)
+#   * group/environment install|remove|upgrade            -> refused (exit 1)
+#   * everything else (search, info, repoquery, clean, …) -> /usr/libexec/dnf5
+#
+# dcli-bootc itself never goes through this shim: it calls /usr/bin/kinpkg (and
+# /usr/bin/rum) directly, and kinpkg calls /usr/libexec/dnf5 — so `dcli-bootc
+# update` / `dcli-bootc overlay upgrade` keep working.
 
-case "${1:-}" in
-    install|in|remove|rm|upgrade|up|update)
-        exec /usr/bin/kinpkg "$@"
+set -euo pipefail
+
+REAL_DNF5=/usr/libexec/dnf5
+KINPKG=/usr/bin/kinpkg
+PROG="${0##*/}"
+
+if [[ ! -x "$REAL_DNF5" ]]; then
+    echo "kineticos-dnf: $REAL_DNF5 is missing — rebuild the image (dcli-bootc update)" >&2
+    exit 127
+fi
+
+# --help / --version are harmless queries: let the real dnf5 answer them, even
+# for `dnf upgrade --help`.
+for arg in "$@"; do
+    case "$arg" in
+        --help|-h|--version)
+            exec -a "$PROG" "$REAL_DNF5" "$@"
+            ;;
+    esac
+done
+
+# Find the command: the first non-option argument, skipping the values of the
+# global options that take a separate value. This keeps `dnf -y update` blocked
+# and `dnf install <pkg-named-update>` allowed.
+args=("$@")
+cmd=""
+rest=()
+i=0
+while [[ $i -lt ${#args[@]} ]]; do
+    a="${args[$i]}"
+    case "$a" in
+        -c|--config|--setopt|--releasever|--installroot|--repo|--enable-repo|--disable-repo|--exclude|--disableexcludes|--enableplugin|--disableplugin)
+            i=$((i + 2))
+            continue
+            ;;
+        -*)
+            i=$((i + 1))
+            continue
+            ;;
+        *)
+            cmd="$a"
+            rest=("${args[@]:$((i + 1))}")
+            break
+            ;;
+    esac
+done
+
+# Refuse system-level/mutating verbs that have no declarative overlay path. They
+# would write into the overlay, shadowing the image and breaking rollbacks.
+refuse_system() {
+    cat >&2 <<'EOF'
+kineticos: refusing a system-level package operation through dnf.
+
+  /usr is a persistent overlay managed declaratively by dcli-bootc. Changing
+  the image's packages through dnf writes into the overlay, shadows the image,
+  and breaks bootc rollbacks.
+
+  System image update:    cd <your-image-project> && dcli-bootc update
+  Overlay packages only:  dcli-bootc overlay upgrade
+
+EOF
+    exit 1
+}
+
+case "$cmd" in
+    autoremove)
+        # Autoremove reasons over the *merged* rpmdb, so it can remove packages
+        # the base image provides — unlinking them through /usr leaves overlayfs
+        # whiteouts that hide the base copies permanently.
+        cat >&2 <<'EOF'
+kineticos: refusing 'autoremove'.
+
+  Autoremove reasons over the merged rpmdb and can remove packages the base
+  image provides, leaving overlayfs whiteouts that hide them permanently.
+
+  To drop overlay packages, remove them from the overlay module and run:
+      dcli-bootc overlay sync
+
+EOF
+        exit 1
         ;;
-    *)
-        exec /usr/bin/dnf5 "$@"
+    upgrade|up|update|distro-sync|dsync|downgrade|dg|reinstall|swap|replay|debuginfo-install|offline-upgrade|offline-distrosync|system-upgrade)
+        refuse_system
+        ;;
+    group|environment)
+        # `dnf group list` is read-only; `dnf group install foo` mutates.
+        sub=""
+        for a in "${rest[@]}"; do
+            case "$a" in
+                -*) ;;
+                *) sub="$a"; break ;;
+            esac
+        done
+        case "$sub" in
+            install|remove|upgrade|mark) refuse_system ;;
+        esac
         ;;
 esac
+
+# Adding to or removing from the overlay goes through kinpkg, from any entry
+# point (dnf, dnf5, yum, microdnf). kinpkg only understands the command
+# (optionally preceded by -y), so anything else is refused rather than handed
+# to raw dnf5.
+case "$cmd" in
+    install|in|remove|rm)
+        case "${1:-}" in
+            install|in|remove|rm|-y|--yes|--assumeyes)
+                exec "$KINPKG" "$@"
+                ;;
+            *)
+                echo "kineticos: unsupported invocation of '$cmd' — put global options after the command, or run 'sudo kinpkg $cmd ...'" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+esac
+
+# Everything else is delegated unchanged, preserving argv[0] so dnf5's
+# yum/microdnf compatibility modes still behave.
+exec -a "$PROG" "$REAL_DNF5" "$@"

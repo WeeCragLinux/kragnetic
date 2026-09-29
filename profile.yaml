@@ -1,8 +1,12 @@
 name: kineticos
 base_image: ghcr.io/ublue-os/bazzite:stable
 nvidia_base_image: ghcr.io/ublue-os/bazzite-nvidia-open:stable
-default_tag: latest
+default_tag: default
 package_manager: dnf
+
+# Bake this project's source into the image at /usr/share/kineticos/project so a
+# running system can reproduce or fork the recipe offline via `dcli-bootc init`.
+include_project: true
 
 enabled_modules:
   - removals
@@ -22,10 +26,11 @@ enabled_modules:
   - overlay
 
 # usr-overlay manifest: packages installed live into the persistent /usr
-# overlay, managed by `dcli-bootc overlay import`/`sync`. NOT in enabled_modules
-# (its packages belong in the overlay, not the image). The `overlay` module
-# above is the infra (mount unit + kinpkg) and stays enabled. Ships empty so
-# each user runs `dcli-bootc overlay import` to snapshot their own packages.
+# overlay. NOT in enabled_modules (its packages belong in the overlay, not the
+# image). The `overlay` module above is the infra (mount unit + kinpkg) and
+# stays enabled. `build`/`update` snapshot live overlay installs here
+# automatically, so a plain `dnf`/`kinpkg` install is recorded with no manual
+# `dcli-bootc overlay import` step.
 overlay_module: overlay-packages
 overlay_backend: kinpkg
 

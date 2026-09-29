@@ -19,11 +19,12 @@ nvidia_base_image: ghcr.io/ublue-os/bazzite-nvidia-open:stable  # NVIDIA
 ```
 
 Builds use `base_image` — the stable Bazzite base for AMD/Intel — unless you
-opt into the NVIDIA variant with `--nvidia`:
+opt into the NVIDIA variant with `--nvidia`. Each variant gets its own tag, so
+the two images coexist locally and in the registry:
 
 ```bash
-dcli-bootc build            # AMD / Intel  (bazzite:stable)
-dcli-bootc build --nvidia   # NVIDIA       (bazzite-nvidia-open:stable)
+dcli-bootc build            # AMD / Intel → localhost/kineticos:default
+dcli-bootc build --nvidia   # NVIDIA      → localhost/kineticos:nvidia
 ```
 
 So to move a machine from the NVIDIA base to the stable AMD base, build or
@@ -57,6 +58,32 @@ dcli-bootc build
 # (prompted after build)
 ```
 
+## Installer ISO
+
+Two ISOs are produced — one per variant — with `build-iso.sh`, which wraps
+bootc-image-builder's `anaconda-iso`. Each ISO's kickstart points the installed
+system's update origin at the matching registry tag, so the variant must be
+pushed before the ISO is used:
+
+```bash
+# AMD / Intel
+dcli-bootc build                                    # localhost/kineticos:default
+skopeo copy containers-storage:localhost/kineticos:default \
+  docker://ghcr.io/don-foco/kineticos:default
+./build-iso.sh                                      # output/kineticos-<date>.iso
+
+# NVIDIA
+dcli-bootc build --nvidia                           # localhost/kineticos:nvidia
+skopeo copy containers-storage:localhost/kineticos:nvidia \
+  docker://ghcr.io/don-foco/kineticos:nvidia
+./build-iso.sh nvidia                               # output/kineticos-nvidia-<date>.iso
+```
+
+The variant selects the kickstart (`disk_config/iso-kineticos.toml` or
+`disk_config/iso-kineticos-nvidia.toml`) and the output filename. `build-iso.sh`
+pulls `ghcr.io/don-foco/kineticos:<variant>` into rootful podman storage; set
+`LOCAL=1` to use an image you built locally instead.
+
 ## Updating
 
 ```bash
@@ -68,6 +95,28 @@ dcli-bootc update
 ```bash
 dcli-bootc rollback
 ```
+
+## Reproduce or fork this image
+
+The image bakes its own project source into `/usr/share/kineticos/project`, so
+you can build on top of it or take the full recipe with you:
+
+```bash
+dcli-bootc init my-image             # prompted: Extend or Fork
+dcli-bootc init --extend my-image    # add your own modules on top of kineticos
+dcli-bootc init --fork my-image      # full copy you own and can rebuild anywhere
+```
+
+* **Extend** keeps `base_image` pointing at the kineticos image, so kineticos
+  continues to manage the base and your project receives its updates. Add your
+  packages/files/services in new modules; the upstream modules are read-only
+  in `/usr/share/kineticos/project` for reference.
+* **Fork** copies the complete project (modules, files, dotfiles) so you can
+  change anything, including switching the base image. You then take over
+  upstream updates.
+
+Overlay packages you installed live are recorded into the new project's
+`modules/overlay-packages.yaml` automatically.
 
 ## Project Structure
 
@@ -104,6 +153,11 @@ kinpkg list
 ```
 
 `ki` is a short alias for `kinpkg` (e.g. `sudo ki install <pkg>`).
+
+Installing packages this way is safe across updates: `dcli-bootc build`/`update`
+never remove live overlay packages you did not declare, and they snapshot your
+live installs into the project automatically — no `dcli-bootc overlay import`
+step to remember.
 
 Installs, removals and upgrades ask `dnf` for confirmation, just like a normal
 `dnf` transaction — add `-y` (or `--assumeyes`) to skip the prompt, e.g.

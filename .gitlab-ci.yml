@@ -1,0 +1,87 @@
+# KineticOS: build the image variants, push them to ghcr, then (manually) build
+# and publish the installer ISOs.
+#
+# RUNNER — needs a self-hosted GitLab Runner tagged `kineticos-builder` with the
+# shell executor on a Fedora host that has rootful podman, skopeo and
+# dcli-bootc, plus passwordless sudo. GitLab.com shared runners cannot build
+# bootc images (no privileged/nested containers). Full setup in CI.md.
+#
+# CI/CD VARIABLES (Settings -> CI/CD -> Variables):
+#   GHCR_USER   GitHub username that owns the ghcr package
+#   GHCR_TOKEN  GitHub PAT with `write:packages` (masked, protected)
+# Omit both if ghcr.io/don-foco/kineticos is public and you only ever pull.
+#
+# The runner is a *builder*, not a deployment target: every build uses
+# --no-switch and --no-import, so CI never changes the runner's own bootc
+# deployment or the project's overlay manifest.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+stages:
+  - image
+  - iso
+
+variables:
+  IMAGE_NAME: kineticos
+  IMAGE_REGISTRY: ghcr.io/don-foco
+
+# Shared settings for the image jobs.
+.image_job:
+  stage: image
+  tags: [kineticos-builder]
+  resource_group: kineticos-build
+  before_script:
+    - |
+      if [ -n "${GHCR_TOKEN:-}" ]; then
+        echo "$GHCR_TOKEN" | sudo skopeo login "$IMAGE_REGISTRY" -u "$GHCR_USER" --password-stdin
+      fi
+
+# Pull the latest base, rebuild the AMD/Intel image, push :default.
+image:default:
+  extends: .image_job
+  script:
+    - dcli-bootc update --no-switch --no-import
+    - sudo skopeo copy
+        "containers-storage:localhost/${IMAGE_NAME}:default"
+        "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:default"
+
+# Pull the latest base, rebuild the NVIDIA image, push :nvidia.
+image:nvidia:
+  extends: .image_job
+  script:
+    - dcli-bootc update --nvidia --no-switch --no-import
+    - sudo skopeo copy
+        "containers-storage:localhost/${IMAGE_NAME}:nvidia"
+        "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:nvidia"
+
+# Manual: build both installer ISOs and upload them to the project's Generic
+# Package Registry, which gives a stable download URL to attach to a Release.
+iso:
+  stage: iso
+  tags: [kineticos-builder]
+  resource_group: kineticos-build
+  needs: ["image:default", "image:nvidia"]
+  when: manual
+  script:
+    - ./build-iso.sh
+    - ./build-iso.sh nvidia
+    - |
+      set -euo pipefail
+      VERSION="$(date +%Y%m%d)"
+      for f in output/*.iso; do
+        name="$(basename "$f")"
+        echo "Publishing ${name} (version ${VERSION}) ..."
+        curl --fail --silent --show-error \
+          --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+          --upload-file "$f" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${IMAGE_NAME}/${VERSION}/${name}"
+      done
+      echo
+      echo "ISOs available under:"
+      echo "  ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${IMAGE_NAME}/${VERSION}/"

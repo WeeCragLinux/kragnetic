@@ -1,21 +1,36 @@
 #!/bin/bash
 set -euo pipefail
 
-# Usage: ./build-iso.sh [tag]
+# Usage: ./build-iso.sh [variant]
 #
 # Builds an Anaconda installer ISO for KineticOS.
+# Variants: default (AMD/Intel, the default) and nvidia.
 # Local only — lands in ./output/ and stays there.
 #
 # Set LOCAL=1 to use a locally-built image instead of pulling from registry.
 
-TAG="${1:-${TAG:-latest}}"
+VARIANT="${1:-${VARIANT:-default}}"
+# The registry tag matches the variant unless TAG is overridden.
+TAG="${TAG:-$VARIANT}"
 
 IMAGE_NAME="${IMAGE_NAME:-kineticos}"
 BIB_IMAGE="${BIB_IMAGE:-quay.io/centos-bootc/bootc-image-builder:latest}"
 REGISTRY="${REGISTRY:-ghcr.io/don-foco}"
 
 cd "$(dirname "$0")"
-CONFIG="${CONFIG:-$(pwd)/disk_config/iso-kineticos.toml}"
+
+# The kickstart points the installed system at the matching registry tag, so
+# each variant uses its own config and output name:
+#   default -> kineticos-<date>.iso
+#   nvidia  -> kineticos-nvidia-<date>.iso
+if [[ "$VARIANT" == "default" ]]; then
+  VARIANT_CONFIG="$(pwd)/disk_config/iso-kineticos.toml"
+  ISO_STEM="kineticos"
+else
+  VARIANT_CONFIG="$(pwd)/disk_config/iso-kineticos-${VARIANT}.toml"
+  ISO_STEM="kineticos-${VARIANT}"
+fi
+CONFIG="${CONFIG:-$VARIANT_CONFIG}"
 mkdir -p output
 
 if [[ ! -f "$CONFIG" ]]; then
@@ -55,7 +70,7 @@ sudo podman run \
 sudo chown -R "$USER:$USER" output/
 
 DATE="$(date +%Y%m%d)"
-FINAL="output/kineticos-${DATE}.iso"
+FINAL="output/${ISO_STEM}-${DATE}.iso"
 mv -f "output/bootiso/install.iso" "$FINAL"
 rm -rf output/bootiso output/qcow2 output/manifest-*.json
 

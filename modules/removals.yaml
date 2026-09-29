@@ -164,7 +164,10 @@ scripts:
         org.kde.okular \
         org.mozilla.firefox \
         org.kde.haruna \
-        org.kde.gwenview
+        org.kde.gwenview \
+        io.github.flattool.Warehouse \
+        com.github.tchx84.Flatseal \
+        org.gnome.Firmware
     do
         grep -qxF "$app" "$stamp" && continue
         flatpak uninstall -y --system --noninteractive "$app" >/dev/null 2>&1 || true

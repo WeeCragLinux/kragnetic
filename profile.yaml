@@ -18,9 +18,6 @@ enabled_modules:
   # the modules whose packages already resolve against the base image, so
   # enabling Terra can't shadow them.
   # - terra
-  # RPM Fusion free + nonfree repos (repo-only module; keep with the other repo
-  # modules, before the overlay).
-  # - rpmfusion
   # Persistent /usr overlay + kinpkg (RakuOS-style); must run last, after the
   # files/ tree is copied into the image (installs the dnf shim over Atomic's).
   - overlay

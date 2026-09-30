@@ -1,9 +1,0 @@
-description: RPM Fusion free + nonfree repos (Fedora)
-# Install the release RPMs (the official method) instead of hand-writing repo
-# files: they carry the repo definitions and the GPG keys. $(rpm -E %fedora)
-# keeps the URL correct across Fedora releases.
-remote_rpms:
-  - url: https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
-    filename: rpmfusion-free-release.noarch.rpm
-  - url: https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
-    filename: rpmfusion-nonfree-release.noarch.rpm

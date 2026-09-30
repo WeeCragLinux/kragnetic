@@ -9,7 +9,7 @@
 # CI/CD VARIABLES (Settings -> CI/CD -> Variables):
 #   GHCR_USER   GitHub username that owns the ghcr package
 #   GHCR_TOKEN  GitHub PAT with `write:packages` (masked, protected)
-# Omit both if ghcr.io/don-foco/kineticos is public and you only ever pull.
+# Omit both if ghcr.io/theblack-don/kineticos is public and you only ever pull.
 #
 # The runner is a *builder*, not a deployment target: every build uses
 # --no-switch and --no-import, so CI never changes the runner's own bootc
@@ -29,7 +29,7 @@ stages:
 
 variables:
   IMAGE_NAME: kineticos
-  IMAGE_REGISTRY: ghcr.io/don-foco
+  IMAGE_REGISTRY: ghcr.io/theblack-don
 
 # Shared settings for the image jobs.
 .image_job:

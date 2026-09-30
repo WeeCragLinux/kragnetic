@@ -1,7 +1,7 @@
 # Continuous integration
 
 `.gitlab-ci.yml` builds the two image variants, pushes them to
-`ghcr.io/don-foco/kineticos` (`:default` and `:nvidia`), and — on demand —
+`ghcr.io/theblack-don/kineticos` (`:default` and `:nvidia`), and — on demand —
 builds and publishes the two installer ISOs.
 
 | Stage | Job | Trigger | What it does |
@@ -126,22 +126,26 @@ kickstart points the installed system's update origin at the matching registry
 tag, so the variant must be pushed before the ISO is used:
 
 ```bash
-# AMD / Intel
+# 1. Build the images
 dcli-bootc build                                    # localhost/kineticos:default
-skopeo copy containers-storage:localhost/kineticos:default \
-  docker://ghcr.io/don-foco/kineticos:default
-./build-iso.sh                                      # output/kineticos-<date>.iso
-
-# NVIDIA
 dcli-bootc build --nvidia                           # localhost/kineticos:nvidia
-skopeo copy containers-storage:localhost/kineticos:nvidia \
-  docker://ghcr.io/don-foco/kineticos:nvidia
+
+# 2. Push to ghcr (needed by the installed system, and by build-iso.sh's
+#    default pull). Authenticate as the GitHub user that owns the package.
+echo "$GHCR_TOKEN" | sudo skopeo login ghcr.io -u <user> --password-stdin
+sudo skopeo copy containers-storage:localhost/kineticos:default \
+  docker://ghcr.io/theblack-don/kineticos:default
+sudo skopeo copy containers-storage:localhost/kineticos:nvidia \
+  docker://ghcr.io/theblack-don/kineticos:nvidia
+
+# 3. Build the ISOs
+./build-iso.sh                                      # output/kineticos-<date>.iso
 ./build-iso.sh nvidia                               # output/kineticos-nvidia-<date>.iso
 ```
 
 The variant selects the kickstart (`disk_config/iso-kineticos.toml` or
 `disk_config/iso-kineticos-nvidia.toml`) and the output filename. `build-iso.sh`
-pulls `ghcr.io/don-foco/kineticos:<variant>` into rootful podman storage; set
+pulls `ghcr.io/theblack-don/kineticos:<variant>` into rootful podman storage; set
 `LOCAL=1` to use an image you built locally instead.
 
 ---
@@ -154,7 +158,7 @@ pulls `ghcr.io/don-foco/kineticos:<variant>` into rootful podman storage; set
   S3-compatible bucket (Cloudflare R2, Backblaze B2) and have the `iso` job
   upload there instead. Image layers in ghcr are comparatively small.
 - **Pull vs push auth.** The ISO job runs `build-iso.sh`, which pulls
-  `ghcr.io/don-foco/kineticos:<variant>`. That works only if the package is
+  `ghcr.io/theblack-don/kineticos:<variant>`. That works only if the package is
   public; if you keep it private, authenticate rootful podman first
   (`echo "$GHCR_TOKEN" | sudo skopeo login ghcr.io -u "$GHCR_USER" --password-stdin`).
 - **Disk cleanup.** Builder storage grows. Add a cron or a scheduled job with

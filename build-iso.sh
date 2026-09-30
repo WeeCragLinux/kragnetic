@@ -15,7 +15,7 @@ TAG="${TAG:-$VARIANT}"
 
 IMAGE_NAME="${IMAGE_NAME:-kineticos}"
 BIB_IMAGE="${BIB_IMAGE:-quay.io/centos-bootc/bootc-image-builder:latest}"
-REGISTRY="${REGISTRY:-ghcr.io/don-foco}"
+REGISTRY="${REGISTRY:-ghcr.io/theblack-don}"
 
 cd "$(dirname "$0")"
 

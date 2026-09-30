@@ -44,6 +44,23 @@ can be pulled by accident.
 
 ## Building
 
+`dcli-bootc` is not part of the base image, so install it on the atomic host
+first. Layering it with `rpm-ostree` keeps the host image consistent with the
+Atomic model (don't use `dnf install`):
+
+```bash
+# Add the dcli-bootc COPR repo, then layer the package
+sudo curl -Lo /etc/yum.repos.d/theblackdon-dcli-bootc.repo \
+  https://copr.fedorainfracloud.org/coprs/theblackdon/dcli-bootc/repo/fedora-$(rpm -E %fedora)/theblackdon-dcli-bootc-fedora-$(rpm -E %fedora).repo
+sudo rpm-ostree install dcli-bootc
+sudo systemctl reboot
+```
+
+`rpm-ostree` stages the package into a new deployment, so the reboot is
+required before `dcli-bootc` is on `PATH`.
+
+Then build the image:
+
 ```bash
 # Enter the repo (init already done by cloning)
 cd kineticos

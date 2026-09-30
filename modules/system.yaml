@@ -1,7 +1,6 @@
 description: System tools baked into image
 packages:
   - dcli-bootc
-  - nodejs24
 repos:
   copr:
     - theblackdon/dcli-bootc

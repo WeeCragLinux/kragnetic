@@ -118,6 +118,34 @@ Omit both if the ghcr package is public and you're only pulling.
 
 ---
 
+## Building the ISOs manually
+
+`build-iso.sh` wraps bootc-image-builder's `anaconda-iso`; it is exactly what
+the `iso` CI job runs. Two ISOs are produced, one per variant. Each ISO's
+kickstart points the installed system's update origin at the matching registry
+tag, so the variant must be pushed before the ISO is used:
+
+```bash
+# AMD / Intel
+dcli-bootc build                                    # localhost/kineticos:default
+skopeo copy containers-storage:localhost/kineticos:default \
+  docker://ghcr.io/don-foco/kineticos:default
+./build-iso.sh                                      # output/kineticos-<date>.iso
+
+# NVIDIA
+dcli-bootc build --nvidia                           # localhost/kineticos:nvidia
+skopeo copy containers-storage:localhost/kineticos:nvidia \
+  docker://ghcr.io/don-foco/kineticos:nvidia
+./build-iso.sh nvidia                               # output/kineticos-nvidia-<date>.iso
+```
+
+The variant selects the kickstart (`disk_config/iso-kineticos.toml` or
+`disk_config/iso-kineticos-nvidia.toml`) and the output filename. `build-iso.sh`
+pulls `ghcr.io/don-foco/kineticos:<variant>` into rootful podman storage; set
+`LOCAL=1` to use an image you built locally instead.
+
+---
+
 ## Caveats
 
 - **ISO storage is large.** Each ISO is several GB and GitLab's free tier has a

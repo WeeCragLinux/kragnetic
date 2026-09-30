@@ -58,32 +58,6 @@ dcli-bootc build
 # (prompted after build)
 ```
 
-## Installer ISO
-
-Two ISOs are produced — one per variant — with `build-iso.sh`, which wraps
-bootc-image-builder's `anaconda-iso`. Each ISO's kickstart points the installed
-system's update origin at the matching registry tag, so the variant must be
-pushed before the ISO is used:
-
-```bash
-# AMD / Intel
-dcli-bootc build                                    # localhost/kineticos:default
-skopeo copy containers-storage:localhost/kineticos:default \
-  docker://ghcr.io/don-foco/kineticos:default
-./build-iso.sh                                      # output/kineticos-<date>.iso
-
-# NVIDIA
-dcli-bootc build --nvidia                           # localhost/kineticos:nvidia
-skopeo copy containers-storage:localhost/kineticos:nvidia \
-  docker://ghcr.io/don-foco/kineticos:nvidia
-./build-iso.sh nvidia                               # output/kineticos-nvidia-<date>.iso
-```
-
-The variant selects the kickstart (`disk_config/iso-kineticos.toml` or
-`disk_config/iso-kineticos-nvidia.toml`) and the output filename. `build-iso.sh`
-pulls `ghcr.io/don-foco/kineticos:<variant>` into rootful podman storage; set
-`LOCAL=1` to use an image you built locally instead.
-
 ## Updating
 
 ```bash

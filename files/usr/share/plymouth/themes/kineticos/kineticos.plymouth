@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=KineticOS
+Description=KineticOS boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/kineticos
+ScriptFile=/usr/share/plymouth/themes/kineticos/kineticos.script

@@ -9,22 +9,50 @@ A minimal Fedora-based bootc image featuring the KineticWE tiling Wayland compos
 - **Desktop**: KineticWE (from experimental COPR)
 - **Greeter**: Noctalia greeter via greetd
 
-## Base image: AMD/Intel vs NVIDIA
+## Base images: AMD/Intel and two NVIDIA variants
 
-`profile.yaml` declares two base images:
+KineticOS builds three variants. `profile.yaml` declares the two that
+`dcli-bootc` knows about natively:
 
 ```yaml
 base_image: ghcr.io/ublue-os/bazzite:stable                     # AMD / Intel
-nvidia_base_image: ghcr.io/ublue-os/bazzite-nvidia-open:stable  # NVIDIA
+nvidia_base_image: ghcr.io/ublue-os/bazzite-nvidia-open:stable  # NVIDIA (open)
 ```
 
-Builds use `base_image` — the stable Bazzite base for AMD/Intel — unless you
-opt into the NVIDIA variant with `--nvidia`. Each variant gets its own tag, so
-the two images coexist locally and in the registry:
+The third — Bazzite's **proprietary** NVIDIA driver for older GPUs
+(`bazzite-nvidia:stable`) — is selected with a host config, because
+`profile.yaml` only has two base-image slots:
+
+```yaml
+# hosts/nvidia-legacy.yaml
+base_image: ghcr.io/ublue-os/bazzite-nvidia:stable
+```
+
+Each variant gets its own tag, so all three coexist locally and in the
+registry:
 
 ```bash
-dcli-bootc build            # AMD / Intel → localhost/kineticos:default
-dcli-bootc build --nvidia   # NVIDIA      → localhost/kineticos:nvidia
+dcli-bootc build -t default                   # AMD / Intel        → :default
+dcli-bootc build --nvidia -t nvidia           # NVIDIA open        → :nvidia
+dcli-bootc build --host nvidia-legacy \
+  -t nvidia-legacy                            # NVIDIA proprietary → :nvidia-legacy
+```
+
+Always pass `-t`: `--nvidia`/`--host` only choose the base image, and without
+`-t` the tag falls back to `profile.yaml`'s `default_tag`. Passing it explicitly
+means you never have to edit `default_tag` between builds.
+
+Use the **open** driver for Turing (RTX 20xx) and newer; use **nvidia-legacy**
+(proprietary) for older cards the open modules don't support.
+
+Each variant also has its own installer ISO and kickstart (see
+`disk_config/iso-kineticos*.toml`), which points the installed system at the
+matching registry tag:
+
+```bash
+./build-iso.sh                # :default
+./build-iso.sh nvidia         # :nvidia
+./build-iso.sh nvidia-legacy  # :nvidia-legacy
 ```
 
 So to move a machine from the NVIDIA base to the stable AMD base, build or

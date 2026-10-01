@@ -1,14 +1,21 @@
 # Continuous integration
 
-`.gitlab-ci.yml` builds the two image variants, pushes them to
-`ghcr.io/theblack-don/kineticos` (`:default` and `:nvidia`), and — on demand —
-builds and publishes the two installer ISOs.
+`.gitlab-ci.yml` builds the three image variants, pushes them to
+`ghcr.io/theblack-don/kineticos` (`:default`, `:nvidia` and `:nvidia-legacy`),
+and — on demand — builds and publishes the three installer ISOs.
 
 | Stage | Job | Trigger | What it does |
 |---|---|---|---|
 | image | `image:default` | push to `master`, schedule, web | `dcli-bootc update --no-switch --no-import`, push `:default` |
 | image | `image:nvidia`  | push to `master`, schedule, web | `dcli-bootc update --nvidia --no-switch --no-import`, push `:nvidia` |
-| iso   | `iso`            | manual | `./build-iso.sh` + `./build-iso.sh nvidia`, upload ISOs |
+| image | `image:nvidia-legacy` | push to `master`, schedule, web | `dcli-bootc update --host nvidia-legacy --no-switch --no-import`, push `:nvidia-legacy` |
+| iso   | `iso`            | manual | `./build-iso.sh`, `./build-iso.sh nvidia`, `./build-iso.sh nvidia-legacy`, upload ISOs |
+
+The third NVIDIA variant (proprietary driver, older GPUs) takes its base image
+from `hosts/nvidia-legacy.yaml` because `profile.yaml` only has two
+base-image slots. If your `dcli-bootc` version's `update --host` does not tag it
+`:nvidia-legacy`, use `dcli-bootc build --host nvidia-legacy -t nvidia-legacy`
+in that job instead (at the cost of not auto-pulling the newest base).
 
 CI never switches a deployment or edits the overlay manifest — the runner is a
 *builder*, not a machine running KineticOS.
@@ -100,7 +107,7 @@ Omit both if the ghcr package is public and you're only pulling.
 
 ## 6. Run it
 
-- **Push to `master`** → the two image jobs build and push automatically.
+- **Push to `master`** → the three image jobs build and push automatically.
 - **Schedule** (Settings → CI/CD → Schedules) → e.g. daily at 03:00, to track
   the moving Bazzite base. Create the schedule once; the image jobs run.
 - **Manual ISO** → open a pipeline (CI/CD → Pipelines → *Run pipeline* on
@@ -110,6 +117,7 @@ Omit both if the ghcr package is public and you're only pulling.
   ```
   https://gitlab.com/api/v4/projects/<PROJECT_ID>/packages/generic/kineticos/<YYYYMMDD>/kineticos-<YYYYMMDD>.iso
   .../kineticos-nvidia-<YYYYMMDD>.iso
+  .../kineticos-nvidia-legacy-<YYYYMMDD>.iso
   ```
 
   The job prints the exact URLs. You can turn one into a **Release** link from
@@ -121,31 +129,45 @@ Omit both if the ghcr package is public and you're only pulling.
 ## Building the ISOs manually
 
 `build-iso.sh` wraps bootc-image-builder's `anaconda-iso`; it is exactly what
-the `iso` CI job runs. Two ISOs are produced, one per variant. Each ISO's
+the `iso` CI job runs. Three ISOs are produced, one per variant. Each ISO's
 kickstart points the installed system's update origin at the matching registry
 tag, so the variant must be pushed before the ISO is used:
 
 ```bash
-# 1. Build the images
-dcli-bootc build                                    # localhost/kineticos:default
-dcli-bootc build --nvidia                           # localhost/kineticos:nvidia
+# 1. Build the images. Always pass -t: --nvidia/--host only choose the base
+#    image, and without -t the tag falls back to profile.yaml's default_tag.
+dcli-bootc build -t default                         # localhost/kineticos:default
+dcli-bootc build --nvidia -t nvidia                 # localhost/kineticos:nvidia
+dcli-bootc build --host nvidia-legacy \
+  -t nvidia-legacy                                  # localhost/kineticos:nvidia-legacy
+#    (--host nvidia-legacy reads hosts/nvidia-legacy.yaml, which points the
+#     build at ghcr.io/ublue-os/bazzite-nvidia:stable)
 
 # 2. Push to ghcr (needed by the installed system, and by build-iso.sh's
-#    default pull). Authenticate as the GitHub user that owns the package.
-echo "$GHCR_TOKEN" | sudo skopeo login ghcr.io -u <user> --password-stdin
+#    default pull). Log in as the GitHub user that owns the package:
+#      export GHCR_USER=your-github-username
+#      export GHCR_TOKEN=your-github-pat   # scope: write:packages
+#    Note: `dcli-bootc build` puts the image in rootful storage, so use sudo.
+export GHCR_USER=your-github-username
+echo "$GHCR_TOKEN" | sudo skopeo login ghcr.io -u "$GHCR_USER" --password-stdin
 sudo skopeo copy containers-storage:localhost/kineticos:default \
   docker://ghcr.io/theblack-don/kineticos:default
 sudo skopeo copy containers-storage:localhost/kineticos:nvidia \
   docker://ghcr.io/theblack-don/kineticos:nvidia
+sudo skopeo copy containers-storage:localhost/kineticos:nvidia-legacy \
+  docker://ghcr.io/theblack-don/kineticos:nvidia-legacy
 
 # 3. Build the ISOs
 ./build-iso.sh                                      # output/kineticos-<date>.iso
 ./build-iso.sh nvidia                               # output/kineticos-nvidia-<date>.iso
+./build-iso.sh nvidia-legacy                        # output/kineticos-nvidia-legacy-<date>.iso
 ```
 
-The variant selects the kickstart (`disk_config/iso-kineticos.toml` or
-`disk_config/iso-kineticos-nvidia.toml`) and the output filename. `build-iso.sh`
-pulls `ghcr.io/theblack-don/kineticos:<variant>` into rootful podman storage; set
+The variant selects the kickstart (`disk_config/iso-kineticos.toml`,
+`disk_config/iso-kineticos-nvidia.toml` or
+`disk_config/iso-kineticos-nvidia-legacy.toml`) and the output filename.
+`build-iso.sh` pulls `ghcr.io/theblack-don/kineticos:<variant>` into rootful
+podman storage; set
 `LOCAL=1` to use an image you built locally instead.
 
 ---

@@ -60,17 +60,31 @@ image:nvidia:
         "containers-storage:localhost/${IMAGE_NAME}:nvidia"
         "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:nvidia"
 
+# Pull the latest base, rebuild the NVIDIA (proprietary driver, older GPUs)
+# image, push :nvidia-legacy. The base image comes from hosts/nvidia-legacy.yaml
+# because profile.yaml only has two base-image slots. If `update --host` does
+# not produce the :nvidia-legacy tag with your dcli-bootc version, use
+# `dcli-bootc build --host nvidia-legacy -t nvidia-legacy` instead.
+image:nvidia-legacy:
+  extends: .image_job
+  script:
+    - dcli-bootc update --host nvidia-legacy --no-switch --no-import
+    - sudo skopeo copy
+        "containers-storage:localhost/${IMAGE_NAME}:nvidia-legacy"
+        "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:nvidia-legacy"
+
 # Manual: build both installer ISOs and upload them to the project's Generic
 # Package Registry, which gives a stable download URL to attach to a Release.
 iso:
   stage: iso
   tags: [kineticos-builder]
   resource_group: kineticos-build
-  needs: ["image:default", "image:nvidia"]
+  needs: ["image:default", "image:nvidia", "image:nvidia-legacy"]
   when: manual
   script:
     - ./build-iso.sh
     - ./build-iso.sh nvidia
+    - ./build-iso.sh nvidia-legacy
     - |
       set -euo pipefail
       VERSION="$(date +%Y%m%d)"

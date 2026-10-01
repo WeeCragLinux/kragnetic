@@ -4,7 +4,8 @@ set -euo pipefail
 # Usage: ./build-iso.sh [variant]
 #
 # Builds an Anaconda installer ISO for KineticOS.
-# Variants: default (AMD/Intel, the default) and nvidia.
+# Variants: default (AMD/Intel), nvidia (NVIDIA open driver) and
+# nvidia-legacy (NVIDIA proprietary driver, older GPUs).
 # Local only — lands in ./output/ and stays there.
 #
 # Set LOCAL=1 to use a locally-built image instead of pulling from registry.
@@ -16,13 +17,17 @@ TAG="${TAG:-$VARIANT}"
 IMAGE_NAME="${IMAGE_NAME:-kineticos}"
 BIB_IMAGE="${BIB_IMAGE:-quay.io/centos-bootc/bootc-image-builder:latest}"
 REGISTRY="${REGISTRY:-ghcr.io/theblack-don}"
+# bootc-image-builder needs the target root filesystem when the source image
+# does not declare one. The kickstart installs to btrfs, so default to that.
+ROOTFS="${ROOTFS:-btrfs}"
 
 cd "$(dirname "$0")"
 
 # The kickstart points the installed system at the matching registry tag, so
 # each variant uses its own config and output name:
-#   default -> kineticos-<date>.iso
-#   nvidia  -> kineticos-nvidia-<date>.iso
+#   default        -> kineticos-<date>.iso          (iso-kineticos.toml)
+#   nvidia         -> kineticos-nvidia-<date>.iso   (iso-kineticos-nvidia.toml)
+#   nvidia-legacy  -> kineticos-nvidia-legacy-<date>.iso
 if [[ "$VARIANT" == "default" ]]; then
   VARIANT_CONFIG="$(pwd)/disk_config/iso-kineticos.toml"
   ISO_STEM="kineticos"
@@ -64,6 +69,7 @@ sudo podman run \
   -v /var/lib/containers/storage:/var/lib/containers/storage \
   "$BIB_IMAGE" \
   --type anaconda-iso \
+  --rootfs "$ROOTFS" \
   --use-librepo=True \
   "localhost/${IMAGE_NAME}:${TAG}"
 

@@ -1,8 +1,19 @@
 description: System tools baked into image
 packages:
   - dcli-bootc
+  # Required by the opt-in KineticOS plymouth theme (ModuleName=script).
+  - plymouth-plugin-script
 repos:
   copr:
     - theblackdon/dcli-bootc
 services:
   - bootc-fetch-apply-updates.timer
+scripts:
+  post: |
+    # Bazzite ships terra-mesa enabled (unlike terra/terra-extras, which are
+    # disabled). KineticOS keeps Terra off, and the enabled terra-mesa breaks
+    # bootc-image-builder's depsolve, which cannot read its file:// GPG key.
+    # Disable it so the built image matches the rest of Terra.
+    if [ -f /etc/yum.repos.d/terra-mesa.repo ]; then
+      sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/terra-mesa.repo
+    fi

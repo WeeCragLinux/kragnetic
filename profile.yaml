@@ -14,6 +14,9 @@ enabled_modules:
   - session
   - greeter
   - system
+  # Rebrands os-release so the installer/ISO identify as KineticOS instead of
+  # Bazzite. Runs before overlay so the overlay files/ tree can't clobber it.
+  - branding
   # Terra repo (Fyra Labs). Disabled by default; uncomment to enable. Kept after
   # the modules whose packages already resolve against the base image, so
   # enabling Terra can't shadow them.
@@ -21,6 +24,9 @@ enabled_modules:
   # Persistent /usr overlay + kinpkg (RakuOS-style); must run last, after the
   # files/ tree is copied into the image (installs the dnf shim over Atomic's).
   - overlay
+  # Optional: KineticOS Plymouth boot splash. Regenerates the initramfs, which
+  # is slow, so it is off by default. Uncomment to enable; it must stay last.
+  # - plymouth
 
 # usr-overlay manifest: packages installed live into the persistent /usr
 # overlay. NOT in enabled_modules (its packages belong in the overlay, not the

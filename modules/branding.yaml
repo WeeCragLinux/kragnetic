@@ -28,3 +28,9 @@ scripts:
       -e 's|^BUG_REPORT_URL=.*|BUG_REPORT_URL="https://gitlab.com/theblackdon/kineticos/-/issues"|' \
       -e "s|^CPE_NAME=.*|CPE_NAME=\"cpe:/o:kineticos:kineticos:${VERSION_ID}\"|" \
       /usr/lib/os-release
+
+    # Drop Bazzite's glow-rendered welcome banner (ujust/brew tips) so fresh
+    # shells start clean. ublue-motd reads these on every interactive shell and
+    # from fish's fish_greeting.
+    : > /usr/share/ublue-os/motd/template.md
+    : > /usr/share/ublue-os/motd/template.sv.md

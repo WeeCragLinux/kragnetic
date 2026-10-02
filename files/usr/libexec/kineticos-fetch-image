@@ -1,0 +1,26 @@
+#!/usr/bin/bash
+# KineticOS: print the running image reference for fastfetch's "Image" line.
+# bootc is authoritative on bootc systems; rpm-ostree is the ostree fallback.
+set -u
+
+ref=""
+if command -v bootc >/dev/null 2>&1; then
+  ref="$(bootc status --json 2>/dev/null \
+    | jq -r '.status.booted.image.imageReference // .status.booted.image.imageDigest // empty' 2>/dev/null)"
+fi
+if [ -z "${ref}" ] && command -v rpm-ostree >/dev/null 2>&1; then
+  ref="$(rpm-ostree status --json --booted 2>/dev/null \
+    | jq -r '.deployments[0]["container-image-reference"] // empty' 2>/dev/null)"
+fi
+
+for prefix in \
+  'ostree-image-signed:docker://' \
+  'ostree-unverified-registry:docker://' \
+  'ostree-unverified-image:docker://' \
+  'ostree-unverified-image:containers-storage:' \
+  'ostree-unverified-registry:containers-storage:' \
+  'containers-storage:'; do
+  ref="${ref#"${prefix}"}"
+done
+
+printf '%s\n' "${ref:-KineticOS}"

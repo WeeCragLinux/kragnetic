@@ -27,3 +27,22 @@ scripts:
     systemctl enable greetd.service
     ln -sf /usr/lib/systemd/system/greetd.service /etc/systemd/system/display-manager.service
     systemctl set-default graphical.target
+
+    # Pin the greeter to KineticWE's default palette (Catppuccin). The declarative
+    # greeter.toml wins over the mutable sync.toml, so a stale scheme or a previous
+    # pick cannot leave the greeter on a different theme. Seed it through
+    # systemd-tmpfiles `C` so /var stays empty in the image and the file appears
+    # (owned by greetd) on first boot; `C` only copies when the target is missing,
+    # preserving any user edits afterwards.
+    install -Dm0644 /dev/stdin /usr/share/kineticos/greeter.toml << 'EOF'
+    # KineticOS: declarative greeter config. Noctalia Sync/UI never write this.
+    [appearance]
+    scheme = "Catppuccin"
+    EOF
+
+    # zz- so this runs after the noctalia-greeter package's `d` entry, which
+    # creates /var/lib/noctalia-greeter with the right owner.
+    install -Dm0644 /dev/stdin /usr/lib/tmpfiles.d/zz-kineticos-greeter.conf << 'EOF'
+    # KineticOS: seed the Catppuccin greeter default on first boot.
+    C /var/lib/noctalia-greeter/greeter.toml 0644 greetd greetd - /usr/share/kineticos/greeter.toml
+    EOF

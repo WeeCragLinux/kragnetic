@@ -136,16 +136,17 @@ tag, so the variant must be pushed before the ISO is used:
 ```bash
 # 1. Build the images. Always pass -t: --nvidia/--host only choose the base
 #    image, and without -t the tag falls back to profile.yaml's default_tag.
-dcli-bootc build -t default                         # localhost/kineticos:default
-dcli-bootc build --nvidia -t nvidia                 # localhost/kineticos:nvidia
-dcli-bootc build --host nvidia-legacy \
-  -t nvidia-legacy                                  # localhost/kineticos:nvidia-legacy
+dcli-bootc build -t default                                   # localhost/kineticos:default
+dcli-bootc build --nvidia -t nvidia                           # localhost/kineticos:nvidia
+dcli-bootc build --host nvidia-legacy -t nvidia-legacy        # localhost/kineticos:nvidia-legacy
 #    (--host nvidia-legacy reads hosts/nvidia-legacy.yaml, which points the
 #     build at ghcr.io/ublue-os/bazzite-nvidia:stable)
 
 # 2. Push to ghcr (needed by the installed system, and by build-iso.sh's
 #    default pull). Log in as the GitHub user that owns the package:
-#      export GHCR_USER=your-github-username
+#      sudo skopeo login ghcr.io -u theblack-don
+#      OR
+#      export GHCR_USER=theblack-don
 #      export GHCR_TOKEN=your-github-pat   # scope: write:packages
 #    Note: `dcli-bootc build` puts the image in rootful storage, so use sudo.
 export GHCR_USER=your-github-username
@@ -166,8 +167,8 @@ sudo skopeo copy containers-storage:localhost/kineticos:nvidia-legacy \
 The variant selects the kickstart (`disk_config/iso-kineticos.toml`,
 `disk_config/iso-kineticos-nvidia.toml` or
 `disk_config/iso-kineticos-nvidia-legacy.toml`) and the output filename.
-`build-iso.sh` pulls `ghcr.io/theblack-don/kineticos:<variant>` into rootful
-podman storage; set
+`build-iso.sh`
+pulls `ghcr.io/theblack-don/kineticos:<variant>` into rootful podman storage; set
 `LOCAL=1` to use an image you built locally instead.
 
 ---

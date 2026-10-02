@@ -60,15 +60,15 @@ image:nvidia:
         "containers-storage:localhost/${IMAGE_NAME}:nvidia"
         "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:nvidia"
 
-# Pull the latest base, rebuild the NVIDIA (proprietary driver, older GPUs)
-# image, push :nvidia-legacy. The base image comes from hosts/nvidia-legacy.yaml
-# because profile.yaml only has two base-image slots. If `update --host` does
-# not produce the :nvidia-legacy tag with your dcli-bootc version, use
-# `dcli-bootc build --host nvidia-legacy -t nvidia-legacy` instead.
+# Rebuild the NVIDIA (proprietary driver, older GPUs) image, push
+# :nvidia-legacy. The base image comes from hosts/nvidia-legacy.yaml because
+# profile.yaml only has two base-image slots. Uses `build -t` (not `update`)
+# so the pushed tag is explicit and does not depend on how `update` derives its
+# tag; the trade-off is that it does not auto-pull the newest base.
 image:nvidia-legacy:
   extends: .image_job
   script:
-    - dcli-bootc update --host nvidia-legacy --no-switch --no-import
+    - dcli-bootc build --host nvidia-legacy -t nvidia-legacy --no-switch --no-import
     - sudo skopeo copy
         "containers-storage:localhost/${IMAGE_NAME}:nvidia-legacy"
         "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:nvidia-legacy"

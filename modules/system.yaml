@@ -1,8 +1,6 @@
 description: System tools baked into image
 packages:
   - dcli-bootc
-  # Required by the opt-in KineticOS plymouth theme (ModuleName=script).
-  - plymouth-plugin-script
 repos:
   copr:
     - theblackdon/dcli-bootc

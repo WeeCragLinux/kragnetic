@@ -24,9 +24,10 @@ enabled_modules:
   # Persistent /usr overlay + kinpkg (RakuOS-style); must run last, after the
   # files/ tree is copied into the image (installs the dnf shim over Atomic's).
   - overlay
-  # Optional: KineticOS Plymouth boot splash. Regenerates the initramfs, which
-  # is slow, so it is off by default. Uncomment to enable; it must stay last.
-  # - plymouth
+  # Plymouth is disabled via the `plymouth.enable=0` karg baked in
+  # files/usr/lib/bootc/kargs.d/ -- no initramfs rebuild, no Bazzite
+  # watermark. Re-enabling a graphical splash would need dracut (see git
+  # history for the old watermark-swap module).
 
 # usr-overlay manifest: packages installed live into the persistent /usr
 # overlay. NOT in enabled_modules (its packages belong in the overlay, not the

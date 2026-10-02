@@ -1,0 +1,8 @@
+# bootc merges files in /usr/lib/bootc/kargs.d/ into the kernel command line
+# on install/upgrade/switch.
+#
+# plymouth.enable=0 disables the plymouth boot splash entirely (both the
+# initramfs copy and the real root), so the base Bazzite watermark is never
+# drawn. This avoids rebuilding the initramfs -- no dracut, no image swap, no
+# size guard.
+kargs = ["plymouth.enable=0"]

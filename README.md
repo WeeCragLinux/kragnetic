@@ -191,6 +191,12 @@ rollbacks — and points you at `dcli-bootc update` / `dcli-bootc overlay sync`.
 Read-only commands go to the real dnf5 at `/usr/libexec/dnf5`. The guard covers
 `dnf5`, `yum` and `microdnf` too, so there is no unguarded dnf path.
 
+The guard only applies to a **booted** system. Inside an image build (for
+example `dcli-bootc init --extend` layering on a kineticos base) there is no
+persistent `/usr` overlay, so the guard detects the missing `/run/ostree-booted`
+and delegates to the real dnf5 — build-time `dnf install` stays a normal image
+install instead of failing with "overlay not mounted".
+
 Prefer keeping packages you actually care about in `modules/*.yaml` — overlay
 packages shadow the base image, are **not atomic**, and are shared across
 rollbacks. Kernel, akmods, nvidia and other core packages are blocked from the

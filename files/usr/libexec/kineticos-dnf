@@ -44,6 +44,15 @@ for arg in "$@"; do
     esac
 done
 
+# Only a booted ostree/bootc system has the persistent /usr overlay. During an
+# image build (podman/bootc container) or a chroot there is no overlay to write
+# into, so routing dnf through kinpkg would fail — and it must not: images
+# layered on kineticos (e.g. `dcli-bootc init --extend`) run plain `dnf install`
+# at build time. Delegate to the real dnf5 there.
+if [[ ! -e /run/ostree-booted ]]; then
+    exec -a "$PROG" "$REAL_DNF5" "$@"
+fi
+
 # Find the command: the first non-option argument, skipping the values of the
 # global options that take a separate value. This keeps `dnf -y update` blocked
 # and `dnf install <pkg-named-update>` allowed.

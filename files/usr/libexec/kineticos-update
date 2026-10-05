@@ -1,0 +1,160 @@
+#!/usr/bin/bash
+# kineticos-update — the KineticOS system-update entry point.
+#
+# KineticOS is an image-based (bootc) OS, so "update the system" means staging
+# a new bootc deployment, not a dnf transaction. `sudo dnf update`/`upgrade`
+# and `sudo kin update`/`upgrade` all land here.
+#
+# There are two kinds of installation, told apart by how bootc tracks the
+# image:
+#
+#   * registry-tracked (a normal install of ghcr.io/theblack-don/kineticos:*)
+#       -> `bootc upgrade` pulls the published image. This is the same thing
+#          the bootc-fetch-apply-updates.timer runs automatically.
+#   * containers-storage-tracked (a `dcli-bootc init --extend` project)
+#       -> `dcli-bootc update` rebuilds the project on the latest base.
+#
+# Like `dcli-bootc update`, this stages the deployment and then asks whether to
+# reboot; it never reboots unless asked. `-y` skips the staging confirmation,
+# `--reboot` reboots without asking.
+
+set -euo pipefail
+
+PROG="${0##*/}"
+
+usage() {
+    cat <<'EOF'
+kineticos-update — stage a KineticOS system image update
+
+  kineticos-update [OPTIONS]
+
+Options:
+  -y, --yes, --assumeyes   do not ask before staging the update
+      --reboot             reboot automatically when a new deployment is staged
+  -h, --help               show this help
+
+Normally reached through `sudo dnf update` or `sudo kin update`.
+EOF
+}
+
+YES=0
+AUTO_REBOOT=0
+for arg in "$@"; do
+    case "$arg" in
+        -y|--yes|--assumeyes) YES=1 ;;
+        --reboot) AUTO_REBOOT=1 ;;
+        -h|--help) usage; exit 0 ;;
+        -*) : ;;  # ignore other dnf flags (e.g. --refresh)
+        *)
+            echo "$PROG: '$arg' is not a system update." >&2
+            echo "  KineticOS updates the whole image; install or remove individual" >&2
+            echo "  packages with 'sudo kinpkg install' / 'sudo kinpkg remove'." >&2
+            exit 2
+            ;;
+    esac
+done
+
+[[ $EUID -eq 0 ]] || { echo "$PROG: must run as root (use sudo)" >&2; exit 1; }
+
+for tool in bootc jq; do
+    command -v "$tool" >/dev/null 2>&1 || { echo "$PROG: $tool not found" >&2; exit 1; }
+done
+
+status_json() { bootc status --json 2>/dev/null; }
+booted_digest() {
+    status_json | jq -r '.status.booted.image.imageDigest // .status.booted.imageDigest // empty'
+}
+staged_digest() {
+    status_json | jq -r '.status.staged.image.imageDigest // .status.staged.imageDigest // empty'
+}
+staged_ref() {
+    status_json | jq -r '.status.staged.image.image.image // .status.staged.image.imageReference // "new deployment"'
+}
+
+# YES or non-interactive -> proceed. default is "y" or "n" for the bare Enter.
+confirm() {
+    local prompt=$1 default=${2:-y} reply
+    if [[ $YES -eq 1 || ! -t 0 ]]; then
+        return 0
+    fi
+    if [[ "$default" == y ]]; then
+        read -r -p "$prompt [Y/n] " reply || reply=""
+        [[ -z "$reply" || "$reply" == [Yy]* ]]
+    else
+        read -r -p "$prompt [y/N] " reply || reply=""
+        [[ "$reply" == [Yy]* ]]
+    fi
+}
+
+reboot_prompt() {
+    [[ $1 -eq 1 ]] || return 0
+    if [[ $AUTO_REBOOT -eq 1 ]]; then
+        echo
+        echo "  Rebooting in 5 seconds... (Ctrl-C to cancel)"
+        sleep 5
+        systemctl reboot
+    elif [[ -t 0 ]] && confirm "Reboot now to apply the new deployment?" n; then
+        echo "  Rebooting..."
+        systemctl reboot
+    else
+        echo
+        echo "  The new deployment applies on next boot."
+        echo "  Run 'sudo reboot' when ready."
+    fi
+}
+
+transport="$(status_json | jq -r '.spec.image.transport // empty')"
+image_ref="$(status_json | jq -r '.spec.image.image // .status.booted.image.imageReference // empty')"
+
+if [[ "$transport" == "containers-storage" ]]; then
+    # Locally-built image (a dcli-bootc `init --extend` project). Rebuilding the
+    # project is the only way it picks up a new KineticOS base.
+    echo "This system boots a locally-built image:"
+    echo "    ${image_ref:-unknown}"
+    echo "Rebuilding it on the latest base with 'dcli-bootc update' ..."
+    echo
+    command -v dcli-bootc >/dev/null 2>&1 || {
+        echo "$PROG: dcli-bootc not found — cannot rebuild the project." >&2
+        echo "  Rebuild it manually, or switch to the published image with:" >&2
+        echo "    sudo bootc switch ghcr.io/theblack-don/kineticos:default" >&2
+        exit 1
+    }
+    dcli_args=(update)
+    [[ $YES -eq 1 ]] && dcli_args+=(--force)
+    [[ $AUTO_REBOOT -eq 1 ]] && dcli_args+=(--reboot)
+    # dcli-bootc owns the project (its registry, dotfiles, ~), so run it as the
+    # user who invoked sudo, not as root.
+    if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]]; then
+        exec runuser -u "$SUDO_USER" -- dcli-bootc "${dcli_args[@]}"
+    else
+        exec dcli-bootc "${dcli_args[@]}"
+    fi
+fi
+
+# Registry-tracked image: pull the published image.
+echo "Updating KineticOS from the registry ..."
+echo "    ${image_ref:-unknown}"
+echo
+
+confirm "Stage the update now?" || { echo "  Cancelled."; exit 0; }
+
+before="$(booted_digest)"
+bootc upgrade
+after="$(staged_digest)"
+
+staged=0
+if [[ -n "$after" && "$after" != "$before" ]]; then
+    staged=1
+    echo
+    echo "New deployment staged:"
+    echo "    $(staged_ref)"
+fi
+
+echo
+echo "Refreshing overlay packages ..."
+if [[ -x /usr/bin/kinpkg ]]; then
+    /usr/bin/kinpkg overlay-upgrade -y \
+        || echo "  Overlay refresh failed — run 'sudo kinpkg sync' after reboot." >&2
+fi
+
+reboot_prompt "$staged"

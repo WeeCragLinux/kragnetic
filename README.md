@@ -103,17 +103,50 @@ dcli-bootc build
 # (prompted after build)
 ```
 
+!!! warning "Release order when changing `dcli-bootc`"
+    `dcli-bootc` is baked into the image (via COPR) and drives `kinpkg`, so
+    publish a new `dcli-bootc` COPR build **before** building and pushing the
+    image. A booted system always runs the matching pair — both come from its
+    own image — so this only affects what the build installs; releasing in this
+    order keeps them in step.
+
 ## Updating
 
+KineticOS is an image-based OS, so an update stages a new bootc deployment.
+The normal Fedora commands work:
+
 ```bash
-dcli-bootc update
+sudo dnf update      # or: sudo kin update
+```
+
+KineticOS picks the right source automatically:
+
+* A normal install tracks `ghcr.io/theblack-don/kineticos:<variant>`, so the
+  update pulls the published image (`bootc upgrade`) — the same thing the
+  `bootc-fetch-apply-updates.timer` baked into the image runs on its own.
+* A machine built with `dcli-bootc init --extend` tracks its own local image,
+  so the update rebuilds that project on the latest KineticOS base
+  (`dcli-bootc update`) and switches to it.
+
+Either way the new deployment is staged, overlay packages are refreshed, and
+you are asked whether to reboot; nothing changes until then.
+`sudo dnf update -y` skips the staging confirmation.
+
+To drive it directly:
+
+```bash
+sudo bootc upgrade   # registry installs
+dcli-bootc update    # extended projects
 ```
 
 ## Rolling Back
 
 ```bash
-dcli-bootc rollback
+sudo bootc rollback   # or: dcli-bootc rollback
 ```
+
+The previous deployment boots on the next reboot. Overlay packages live in
+`/var` and are shared across deployments, so they are **not** rolled back.
 
 ## Reproduce or fork this image
 
@@ -165,10 +198,16 @@ the rpmdb lives in `/usr/share/rpm`, inside the overlay.
 ```bash
 sudo kinpkg install <pkg>   # native RPM, survives image updates
 sudo kinpkg remove <pkg>
-sudo kinpkg upgrade         # upgrade overlay-installed packages only
-sudo kinpkg sync            # distro-sync overlay packages after a base update
+sudo kin update             # update the system image (and overlay packages)
+sudo kinpkg overlay-upgrade # upgrade overlay-installed packages only
+sudo kinpkg sync            # distro-sync overlay packages against the new base
 kinpkg list
 ```
+
+After an image update, `kineticos-overlay-sync.service` runs `kinpkg sync` once
+on the next boot, so overlay packages are rebuilt against the new base
+automatically. To do it by hand, or to check for drift: `sudo kinpkg sync` and
+`dcli-bootc overlay status`.
 
 `ki` is a short alias for `kinpkg` (e.g. `sudo ki install <pkg>`).
 
@@ -184,10 +223,11 @@ then passes `-y` to `kinpkg` for its automated sync/upgrade.
 
 Plain `dnf` works too: the Atomic shim that errors on `dnf install` is replaced
 (in the overlay module) with a guard. `install`/`remove` are routed through
-`kinpkg`; every other mutating operation (`upgrade`, `downgrade`,
-`distro-sync`, `reinstall`, `swap`, `autoremove`, `group install`, …) is
-**refused** — it would write into the overlay, shadow the image and break
-rollbacks — and points you at `dcli-bootc update` / `dcli-bootc overlay sync`.
+`kinpkg`, and `dnf update`/`dnf upgrade` stage a system image update (see
+above); the remaining mutating operations (`downgrade`, `distro-sync`,
+`reinstall`, `swap`, `autoremove`, `group install`, …) are **refused** — they
+would write into the overlay, shadow the image and break rollbacks — and point
+you at `sudo dnf update` / `sudo kinpkg sync`.
 Read-only commands go to the real dnf5 at `/usr/libexec/dnf5`. The guard covers
 `dnf5`, `yum` and `microdnf` too, so there is no unguarded dnf path.
 

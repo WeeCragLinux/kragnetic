@@ -1,0 +1,43 @@
+#!/usr/bin/bash
+# kineticos-overlay-sync — reconcile overlay-installed packages with the base
+# image that was just booted.
+#
+# The persistent /usr overlay survives image updates, so an overlay package can
+# end up linked against a base that has since moved on. Run `kinpkg sync`
+# (distro-sync of the overlay set) once per booted base image. Keyed on the
+# booted image digest, so a normal reboot is a no-op and a failed sync retries
+# on the next boot.
+#
+# Invoked by kineticos-overlay-sync.service (root, after network-online).
+
+set -euo pipefail
+
+OVERLAY_BASE=/var/lib/kineticos/overlay
+STAMP="$OVERLAY_BASE/.synced-image"
+RECORD="$OVERLAY_BASE/installed.txt"
+
+log() { echo "kineticos-overlay-sync: $*"; }
+
+# Booted bootc system only.
+[[ -e /run/ostree-booted ]] || exit 0
+# Overlay enabled and mounted.
+[[ -e "$OVERLAY_BASE/disabled" ]] && exit 0
+[[ "$(findmnt -nro FSTYPE /usr 2>/dev/null || true)" == "overlay" ]] || exit 0
+# Nothing overlay-installed -> nothing to reconcile.
+[[ -s "$RECORD" ]] || exit 0
+[[ -x /usr/bin/kinpkg ]] || exit 0
+
+command -v bootc >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+
+digest="$(bootc status --json 2>/dev/null \
+    | jq -r '.status.booted.image.imageDigest // .status.booted.imageDigest // empty')"
+[[ -n "$digest" ]] || exit 0
+[[ "$(cat "$STAMP" 2>/dev/null || true)" == "$digest" ]] && exit 0
+
+if /usr/bin/kinpkg sync -y; then
+    echo "$digest" > "$STAMP"
+else
+    log "kinpkg sync failed — will retry on next boot"
+fi
+exit 0

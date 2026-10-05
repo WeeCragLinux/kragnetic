@@ -7,15 +7,17 @@
 # copied to /usr/libexec/dnf5.
 #
 # Every mutation of the persistent /usr overlay is funnelled through kinpkg, or
-# refused. A plain `dnf upgrade`/`autoremove` writes into the overlay's upperdir,
+# refused. A plain `dnf install`/`autoremove` writes into the overlay's upperdir,
 # shadowing the image, surviving reboots, and silently defeating bootc's
 # atomicity.
 #
 # Behaviour:
 #   * install / remove                                    -> kinpkg
 #     (its base-package guardrails and its record of overlay packages)
-#   * upgrade / downgrade / distro-sync / reinstall /
-#     swap / autoremove / system-level verbs             -> refused (exit 1)
+#   * update / upgrade                                    -> kineticos-update
+#     (stages a new bootc deployment — the image, not the overlay)
+#   * downgrade / distro-sync / reinstall / swap /
+#     autoremove / system-level verbs                    -> refused (exit 1)
 #   * group/environment install|remove|upgrade            -> refused (exit 1)
 #   * everything else (search, info, repoquery, clean, …) -> /usr/libexec/dnf5
 #
@@ -89,8 +91,9 @@ kineticos: refusing a system-level package operation through dnf.
   the image's packages through dnf writes into the overlay, shadows the image,
   and breaks bootc rollbacks.
 
-  System image update:    cd <your-image-project> && dcli-bootc update
-  Overlay packages only:  dcli-bootc overlay upgrade
+  System image update:    sudo dnf update      (or: sudo kin update)
+  Overlay packages only:  sudo kinpkg overlay-upgrade
+  Reconcile overlay set:  sudo kinpkg sync
 
 EOF
     exit 1
@@ -113,7 +116,20 @@ kineticos: refusing 'autoremove'.
 EOF
         exit 1
         ;;
-    upgrade|up|update|distro-sync|dsync|downgrade|dg|reinstall|swap|replay|debuginfo-install|offline-upgrade|offline-distrosync|system-upgrade)
+    upgrade|up|update)
+        # The image is the source of truth: a system update stages a new bootc
+        # deployment, handled by kineticos-update rather than dnf. Keep the
+        # confirmation/reboot flags even when they preceded the command
+        # (e.g. `dnf -y update`); drop dnf's other global options.
+        update_args=("${rest[@]}")
+        for a in "${args[@]:0:$i}"; do
+            case "$a" in
+                -y|--yes|--assumeyes|--reboot) update_args+=("$a") ;;
+            esac
+        done
+        exec /usr/libexec/kineticos-update "${update_args[@]}"
+        ;;
+    distro-sync|dsync|downgrade|dg|reinstall|swap|replay|debuginfo-install|offline-upgrade|offline-distrosync|system-upgrade)
         refuse_system
         ;;
     group|environment)

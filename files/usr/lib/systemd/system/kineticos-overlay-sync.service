@@ -1,0 +1,13 @@
+[Unit]
+Description=Distro-sync overlay packages against the booted base image
+Documentation=https://gitlab.com/theblackdon/kineticos
+After=network-online.target kineticos-overlay-mount.service
+Wants=network-online.target
+ConditionPathExists=/run/ostree-booted
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kineticos-overlay-sync
+
+[Install]
+WantedBy=multi-user.target

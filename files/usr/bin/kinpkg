@@ -32,20 +32,24 @@ usage() {
 kinpkg — native RPMs into the persistent /usr overlay
 (also available as 'ki')
 
+  kinpkg update            update the system image (and overlay packages)
   kinpkg install PKG...    install package(s) into the overlay
   kinpkg install FILE.rpm  install local .rpm file(s) into the overlay
   kinpkg remove PKG...     remove package(s) from the overlay
-  kinpkg upgrade           upgrade overlay-installed packages
+  kinpkg overlay-upgrade   upgrade overlay-installed packages only
   kinpkg sync              distro-sync overlay packages against the new base
   kinpkg list              list packages installed via kinpkg
   kinpkg search ARGS...    search dnf repos (read-only)
 
 Options:
   -y, --yes, --assumeyes   skip dnf's confirmation prompt (accept all)
+      --reboot             with 'update': reboot when a new deployment is staged
 
 Notes:
-  * Without -y every install/remove/upgrade asks dnf for confirmation, like a
-    normal dnf transaction. dcli-bootc passes -y after its own approval.
+  * 'kinpkg update' (like 'sudo dnf update') stages a new bootc deployment and
+    asks whether to reboot; the image changes on next boot, not immediately.
+  * Without -y every install/remove asks dnf for confirmation, like a normal
+    dnf transaction. dcli-bootc passes -y after its own approval.
   * Overlay packages survive `dcli-bootc update` but are NOT atomic: they
     shadow the base image and are shared across rollbacks.
   * kernel/nvidia/akmods/bazzite packages are blocked — bake those into the
@@ -119,6 +123,31 @@ all() {
 overlay_pkgs() { all "$RECORD"; }
 local_pkgs() { all "$RPM_RECORD"; }
 
+# Upgrade only the packages already installed in the overlay. This is the
+# overlay-only step dcli-bootc runs during a rebuild; `kinpkg overlay-upgrade`
+# exposes it directly.
+overlay_upgrade() {
+    require_overlay
+    local -a pkgs
+    mapfile -t pkgs < <(overlay_pkgs)
+    [[ ${#pkgs[@]} -gt 0 ]] || { echo "kinpkg: no overlay packages to upgrade"; return 0; }
+    "$DNF" upgrade "${YES[@]}" -- "${pkgs[@]}"
+}
+
+# True when kinpkg was launched by dcli-bootc (possibly through sudo). Older
+# dcli-bootc builds call `kinpkg upgrade` for their overlay-only step; without
+# this guard that call would recurse into a full system update.
+invoked_by_dcli_bootc() {
+    local pid=$$ comm
+    for _ in 1 2 3 4 5; do
+        pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')" || return 1
+        [[ -n "$pid" && "$pid" != 0 && "$pid" != 1 ]] || return 1
+        comm="$(ps -o comm= -p "$pid" 2>/dev/null || true)"
+        [[ "$comm" == "dcli-bootc" ]] && return 0
+    done
+    return 1
+}
+
 # Flags are forwarded to dnf. With no -y/--assumeyes, dnf prompts for
 # confirmation as usual; dcli-bootc passes -y after it has asked the user.
 YES=()
@@ -191,16 +220,21 @@ case "$cmd" in
         done
         unrecord "$RPM_RECORD" "${local_names[@]}"
         ;;
-    upgrade|update)
-        require_overlay
-        mapfile -t pkgs < <(overlay_pkgs)
-        [[ ${#pkgs[@]} -gt 0 ]] || { echo "kinpkg: no overlay packages to upgrade — use 'dcli-bootc update' for system image updates"; exit 0; }
-        "$DNF" upgrade "${YES[@]}" -- "${pkgs[@]}"
+    update|up|upgrade)
+        # A system update is a new bootc deployment, not a dnf transaction.
+        if invoked_by_dcli_bootc; then
+            overlay_upgrade
+        else
+            exec /usr/libexec/kineticos-update "${YES[@]}" "$@"
+        fi
+        ;;
+    overlay-upgrade)
+        overlay_upgrade
         ;;
     sync)
         require_overlay
         mapfile -t pkgs < <(overlay_pkgs)
-        [[ ${#pkgs[@]} -gt 0 ]] || { echo "kinpkg: no overlay packages to sync — use 'dcli-bootc update' for system image updates"; exit 0; }
+        [[ ${#pkgs[@]} -gt 0 ]] || { echo "kinpkg: no overlay packages to sync"; exit 0; }
         "$DNF" distro-sync "${YES[@]}" -- "${pkgs[@]}"
         ;;
     list)

@@ -20,6 +20,13 @@ in that job instead (at the cost of not auto-pulling the newest base).
 CI never switches a deployment or edits the overlay manifest — the runner is a
 *builder*, not a machine running KineticOS.
 
+!!! warning "Release order when changing `dcli-bootc`"
+    The image installs `dcli-bootc` from the `theblackdon/dcli-bootc` COPR and
+    ships the `kinpkg` it calls. Publish a new `dcli-bootc` COPR build
+    **before** the pipeline builds the image, so the image picks up the pair the
+    way it was tested. `kinpkg`'s compatibility guard tolerates an old
+    `dcli-bootc`, but releasing in order is the intended path.
+
 ---
 
 ## 1. You need a builder (self-hosted runner)

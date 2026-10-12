@@ -1,0 +1,71 @@
+description: Steam Deck base — boot to Gaming Mode, KineticWE as the desktop
+scripts:
+  post: |
+    # The Steam Deck base boots into Gaming Mode via SDDM + gamescope
+    # (bazzite-autologin.service + /usr/lib/sddm/sddm.conf.d/holo.conf) and
+    # switches between Gaming Mode and the desktop through steamos-manager.
+    #
+    # This module is always enabled but self-guards on the base image, so it is
+    # a no-op on every non-deck variant: only `--base-image deck` applies it.
+    # The shared `removals` module strips KDE but keeps SDDM (the desktop
+    # variants point display-manager at greetd instead); this wiring takes the
+    # DM back for the Deck and points the "desktop" session at KineticWE.
+    if grep -q '"image-name": "bazzite-deck' /usr/share/ublue-os/image-info.json; then
+      echo "KineticOS: configuring the Steam Deck variant"
+
+      # SDDM is the display manager the Gaming Mode / desktop switch drives.
+      # `removals` no longer lists it, but removing `sddm-kcm` drags SDDM out
+      # as a dependent, so reinstall it and take the DM back from the `greeter`
+      # module (which pointed display-manager at greetd).
+      dnf install -y sddm
+      systemctl enable --force sddm.service
+      ln -sf /usr/lib/systemd/system/sddm.service /etc/systemd/system/display-manager.service
+      systemctl disable greetd.service 2>/dev/null || true
+
+      # On a kinoite/deck base the switcher selects "plasma.desktop". Point that
+      # entry at KineticWE instead of patching steamos-manager internals, so
+      # every session-name path (SDDM, os-session-select, bazzite-autologin)
+      # lands in KineticWE.
+    install -Dm0644 /dev/stdin /usr/share/wayland-sessions/plasma.desktop << 'EOF'
+    [Desktop Entry]
+    Name=KineticWE
+    Comment=KineticWE Wayland session (Deck desktop mode)
+    Exec=/usr/bin/start-kineticwe
+    Type=Application
+    DesktopNames=KDE
+    EOF
+
+      # steamos-manager stores its default desktop session per user; seed it so
+      # a fresh account switches to KineticWE in Desktop Mode.
+    install -Dm0644 /dev/stdin /etc/skel/.config/steamos-manager/state.toml << 'EOF'
+    [services]
+
+    [session_manager]
+    default_login_mode = "Game"
+    desktop_session = "kineticwe.desktop"
+    EOF
+
+      # Forward-compat: newer steamos-manager builds read this default.
+      if [ -f /usr/share/steamos-manager/platform.toml ]; then
+        grep -q '^\[session\]' /usr/share/steamos-manager/platform.toml \
+          || printf '\n[session]\n' >> /usr/share/steamos-manager/platform.toml
+        sed -i 's/^desktop = .*/desktop = "kineticwe.desktop"/' \
+          /usr/share/steamos-manager/platform.toml
+      fi
+
+      # Steam-client compatibility path (older Steam calls this script).
+      if [ -f /usr/libexec/os-session-select ]; then
+        sed -i 's/plasma\.desktop/kineticwe.desktop/g' /usr/libexec/os-session-select
+      fi
+
+      # Launcher so the desktop can return to Gaming Mode.
+    install -Dm0644 /dev/stdin /usr/share/applications/return-to-gamemode.desktop << 'EOF'
+    [Desktop Entry]
+    Type=Application
+    Name=Return to Gaming Mode
+    Exec=/usr/bin/return-to-gamemode
+    Icon=steam
+    Terminal=false
+    Categories=Game;
+    EOF
+    fi

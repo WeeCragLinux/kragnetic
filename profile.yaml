@@ -1,8 +1,15 @@
 name: kineticos
 base_image: ghcr.io/ublue-os/bazzite:stable
-nvidia_base_image: ghcr.io/ublue-os/bazzite-nvidia-open:stable
 default_tag: default
 package_manager: dnf
+
+# Named base-image variants, selected at build time with `--base-image <name>`.
+# The variant name is also the default image tag (`--base-image deck` builds
+# `:deck`). `base_image` above stays the default AMD/Intel image.
+base_images:
+  nvidia: ghcr.io/ublue-os/bazzite-nvidia-open:stable
+  nvidia-legacy: ghcr.io/ublue-os/bazzite-nvidia:stable
+  deck: ghcr.io/ublue-os/bazzite-deck:stable
 
 # Bake this project's source into the image at /usr/share/kineticos/project so a
 # running system can reproduce or fork the recipe offline via `dcli-bootc init`.
@@ -13,6 +20,9 @@ enabled_modules:
   - kineticwe
   - session
   - greeter
+  # Steam Deck base (self-guards on the deck base image, no-op elsewhere):
+  # keeps SDDM + Gaming Mode and points Desktop Mode at KineticWE.
+  - deck
   - system
   # Rebrands os-release so the installer/ISO identify as KineticOS instead of
   # Bazzite. Runs before overlay so the overlay files/ tree can't clobber it.

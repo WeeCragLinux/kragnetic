@@ -8,44 +8,40 @@ A minimal Fedora-based bootc image featuring the KineticWE tiling Wayland compos
 - **Kernel**: Bazzite/OGC kernel with NVIDIA support
 - **Desktop**: KineticWE (from experimental COPR)
 - **Greeter**: Noctalia greeter via greetd
+- **Deck variant**: Steam Gaming Mode via SDDM + gamescope, KineticWE in Desktop Mode
 
-## Base images: AMD/Intel and two NVIDIA variants
+## Base images and variants
 
-KineticOS builds three variants. `profile.yaml` declares the two that
-`dcli-bootc` knows about natively:
-
-```yaml
-base_image: ghcr.io/ublue-os/bazzite:stable                     # AMD / Intel
-nvidia_base_image: ghcr.io/ublue-os/bazzite-nvidia-open:stable  # NVIDIA (open)
-```
-
-The third — Bazzite's **proprietary** NVIDIA driver for older GPUs
-(`bazzite-nvidia:stable`) — is selected with a host config, because
-`profile.yaml` only has two base-image slots:
+KineticOS builds several variants. `profile.yaml` declares the default image
+plus a `base_images` map of named variants:
 
 ```yaml
-# hosts/nvidia-legacy.yaml
-base_image: ghcr.io/ublue-os/bazzite-nvidia:stable
+base_image: ghcr.io/ublue-os/bazzite:stable              # default, AMD / Intel
+
+base_images:
+  nvidia: ghcr.io/ublue-os/bazzite-nvidia-open:stable    # NVIDIA (open)
+  nvidia-legacy: ghcr.io/ublue-os/bazzite-nvidia:stable # NVIDIA (proprietary)
+  deck: ghcr.io/ublue-os/bazzite-deck:stable             # Steam Deck / gaming
 ```
 
-Each variant gets its own tag, so all three coexist locally and in the
-registry:
+Select a variant at build time with `--base-image <name>`. The variant name is
+also the image tag, so `-t` is only needed to override it:
 
 ```bash
-dcli-bootc build -t default                   # AMD / Intel        → :default
-dcli-bootc build --nvidia -t nvidia           # NVIDIA open        → :nvidia
-dcli-bootc build --host nvidia-legacy \
-  -t nvidia-legacy                            # NVIDIA proprietary → :nvidia-legacy
+dcli-bootc build                              # AMD / Intel        → :default
+dcli-bootc build --nvidia                     # NVIDIA open        → :nvidia
+dcli-bootc build --base-image nvidia-legacy   # NVIDIA proprietary → :nvidia-legacy
+dcli-bootc build --base-image deck            # Steam Deck         → :deck
 ```
 
-Always pass `-t`: `--nvidia`/`--host` only choose the base image, and without
-`-t` the tag falls back to `profile.yaml`'s `default_tag`. Passing it explicitly
-means you never have to edit `default_tag` between builds.
+`--nvidia` is an alias for `--base-image nvidia`. Because the variant name is
+the default tag, a variant never overwrites the `default_tag` image unless you
+pass an explicit `--tag`.
 
 Use the **open** driver for Turing (RTX 20xx) and newer; use **nvidia-legacy**
 (proprietary) for older cards the open modules don't support.
 
-Each variant also has its own installer ISO and kickstart (see
+Each shipped variant also has its own installer ISO and kickstart (see
 `disk_config/iso-kineticos*.toml`), which points the installed system at the
 matching registry tag:
 
@@ -53,10 +49,11 @@ matching registry tag:
 ./build-iso.sh                # :default
 ./build-iso.sh nvidia         # :nvidia
 ./build-iso.sh nvidia-legacy  # :nvidia-legacy
+./build-iso.sh deck           # :deck
 ```
 
 So to move a machine from the NVIDIA base to the stable AMD base, build or
-update **without** `--nvidia`:
+update **without** a variant:
 
 ```bash
 dcli-bootc update           # pulls bazzite:stable, rebuilds, and switches
@@ -66,9 +63,25 @@ The rebuild starts from the AMD base layer, so the NVIDIA base and its
 kernel/akmods are replaced wholesale — nothing carries over from the previous
 NVIDIA build. `dcli-bootc update` behaves the same way.
 
-If this project only ever targets AMD, drop the `nvidia_base_image` line from
-`profile.yaml`. `--nvidia` then falls back to `base_image`, so no NVIDIA base
-can be pulled by accident.
+If this project only ever targets AMD, drop the `nvidia` (and other) entries
+from `base_images`. `--nvidia` then falls back to `base_image`, so no NVIDIA
+base can be pulled by accident.
+
+## Steam Deck variant
+
+The `:deck` variant is built on Bazzite's Steam Deck base (`bazzite-deck:stable`)
+and targets handhelds/HTPCs that should boot straight into Steam Gaming Mode:
+
+```bash
+dcli-bootc build --base-image deck   # → localhost/kineticos:deck
+./build-iso.sh deck                  # → output/kineticos-deck-<date>.iso
+```
+
+It boots into Gaming Mode (SDDM autologin to the gamescope/Steam session),
+and switching to Desktop Mode launches **KineticWE** instead of KDE. The wiring
+lives in `modules/deck.yaml`, which self-guards on the deck base image, so the
+same build script is used for every variant — switching is just
+`--base-image deck`.
 
 ## Building
 
@@ -180,6 +193,7 @@ KineticOS/
 │   ├── kineticwe.yaml  # KineticWE + deps
 │   ├── session.yaml    # Session packages
 │   ├── greeter.yaml    # greetd login manager
+│   ├── deck.yaml       # Steam Deck base (Gaming Mode + KineticWE desktop)
 │   ├── system.yaml     # dcli-bootc
 │   ├── terra.yaml      # Terra repo (Fyra Labs)
 │   └── overlay.yaml    # Persistent /usr overlay + kinpkg

@@ -8,3 +8,4 @@ packages:
   # KWE Related Packages
   - spectacle
   - dolphin
+  - konsole

@@ -61,30 +61,39 @@ image:nvidia:
         "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:nvidia"
 
 # Rebuild the NVIDIA (proprietary driver, older GPUs) image, push
-# :nvidia-legacy. The base image comes from hosts/nvidia-legacy.yaml because
-# profile.yaml only has two base-image slots. Uses `build -t` (not `update`)
-# so the pushed tag is explicit and does not depend on how `update` derives its
-# tag; the trade-off is that it does not auto-pull the newest base.
+# :nvidia-legacy. The base image is `base_images.nvidia-legacy` in
+# profile.yaml; the variant name is also used as the tag.
 image:nvidia-legacy:
   extends: .image_job
   script:
-    - dcli-bootc build --host nvidia-legacy -t nvidia-legacy --no-switch --no-import
+    - dcli-bootc update --base-image nvidia-legacy --no-switch --no-import
     - sudo skopeo copy
         "containers-storage:localhost/${IMAGE_NAME}:nvidia-legacy"
         "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:nvidia-legacy"
 
-# Manual: build both installer ISOs and upload them to the project's Generic
+# Rebuild the Steam Deck image (bazzite-deck base, Gaming Mode + KineticWE),
+# push :deck. The base image is `base_images.deck` in profile.yaml.
+image:deck:
+  extends: .image_job
+  script:
+    - dcli-bootc update --base-image deck --no-switch --no-import
+    - sudo skopeo copy
+        "containers-storage:localhost/${IMAGE_NAME}:deck"
+        "docker://${IMAGE_REGISTRY}/${IMAGE_NAME}:deck"
+
+# Manual: build the installer ISOs and upload them to the project's Generic
 # Package Registry, which gives a stable download URL to attach to a Release.
 iso:
   stage: iso
   tags: [kineticos-builder]
   resource_group: kineticos-build
-  needs: ["image:default", "image:nvidia", "image:nvidia-legacy"]
+  needs: ["image:default", "image:nvidia", "image:nvidia-legacy", "image:deck"]
   when: manual
   script:
     - ./build-iso.sh
     - ./build-iso.sh nvidia
     - ./build-iso.sh nvidia-legacy
+    - ./build-iso.sh deck
     - |
       set -euo pipefail
       VERSION="$(date +%Y%m%d)"

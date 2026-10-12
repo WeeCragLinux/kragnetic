@@ -1,21 +1,24 @@
 # Continuous integration
 
-`.gitlab-ci.yml` builds the three image variants, pushes them to
-`ghcr.io/theblack-don/kineticos` (`:default`, `:nvidia` and `:nvidia-legacy`),
-and — on demand — builds and publishes the three installer ISOs.
+`.gitlab-ci.yml` builds the four image variants, pushes them to
+`ghcr.io/theblack-don/kineticos` (`:default`, `:nvidia`, `:nvidia-legacy` and
+`:deck`), and — on demand — builds and publishes the four installer ISOs.
 
 | Stage | Job | Trigger | What it does |
 |---|---|---|---|
 | image | `image:default` | push to `master`, schedule, web | `dcli-bootc update --no-switch --no-import`, push `:default` |
 | image | `image:nvidia`  | push to `master`, schedule, web | `dcli-bootc update --nvidia --no-switch --no-import`, push `:nvidia` |
-| image | `image:nvidia-legacy` | push to `master`, schedule, web | `dcli-bootc update --host nvidia-legacy --no-switch --no-import`, push `:nvidia-legacy` |
-| iso   | `iso`            | manual | `./build-iso.sh`, `./build-iso.sh nvidia`, `./build-iso.sh nvidia-legacy`, upload ISOs |
+| image | `image:nvidia-legacy` | push to `master`, schedule, web | `dcli-bootc update --base-image nvidia-legacy --no-switch --no-import`, push `:nvidia-legacy` |
+| image | `image:deck`    | push to `master`, schedule, web | `dcli-bootc update --base-image deck --no-switch --no-import`, push `:deck` |
+| iso   | `iso`            | manual | `./build-iso.sh`, `./build-iso.sh nvidia`, `./build-iso.sh nvidia-legacy`, `./build-iso.sh deck`, upload ISOs |
 
 The third NVIDIA variant (proprietary driver, older GPUs) takes its base image
-from `hosts/nvidia-legacy.yaml` because `profile.yaml` only has two
-base-image slots. If your `dcli-bootc` version's `update --host` does not tag it
-`:nvidia-legacy`, use `dcli-bootc build --host nvidia-legacy -t nvidia-legacy`
-in that job instead (at the cost of not auto-pulling the newest base).
+from the `base_images.nvidia-legacy` entry in `profile.yaml`. The variant name
+is also used as the tag, so no explicit `-t` is needed.
+
+The `:deck` variant uses Bazzite's Steam Deck base (`base_images.deck`). It
+boots into Steam Gaming Mode and switches to a KineticWE desktop; the wiring
+lives in `modules/deck.yaml`, which self-guards on the deck base image.
 
 CI never switches a deployment or edits the overlay manifest — the runner is a
 *builder*, not a machine running KineticOS.
@@ -125,6 +128,7 @@ Omit both if the ghcr package is public and you're only pulling.
   https://gitlab.com/api/v4/projects/<PROJECT_ID>/packages/generic/kineticos/<YYYYMMDD>/kineticos-<YYYYMMDD>.iso
   .../kineticos-nvidia-<YYYYMMDD>.iso
   .../kineticos-nvidia-legacy-<YYYYMMDD>.iso
+  .../kineticos-deck-<YYYYMMDD>.iso
   ```
 
   The job prints the exact URLs. You can turn one into a **Release** link from
@@ -136,18 +140,26 @@ Omit both if the ghcr package is public and you're only pulling.
 ## Building the ISOs manually
 
 `build-iso.sh` wraps bootc-image-builder's `anaconda-iso`; it is exactly what
-the `iso` CI job runs. Three ISOs are produced, one per variant. Each ISO's
+the `iso` CI job runs. Four ISOs are produced, one per variant. Each ISO's
 kickstart points the installed system's update origin at the matching registry
-tag, so the variant must be pushed before the ISO is used:
+tag, so the variant must be pushed before the ISO is used.
+
+> This needs a `dcli-bootc` with `--base-image` support. If you still have the
+> older COPR build, `--base-image` is an unknown flag and `--nvidia` falls back
+> to `base_image` (there is no `nvidia_base_image` in `profile.yaml` any more).
+> Release/install the new `dcli-bootc` first — see the release-order warning
+> above.
 
 ```bash
-# 1. Build the images. Always pass -t: --nvidia/--host only choose the base
-#    image, and without -t the tag falls back to profile.yaml's default_tag.
-dcli-bootc build -t default                                   # localhost/kineticos:default
-dcli-bootc build --nvidia -t nvidia                           # localhost/kineticos:nvidia
-dcli-bootc build --host nvidia-legacy -t nvidia-legacy        # localhost/kineticos:nvidia-legacy
-#    (--host nvidia-legacy reads hosts/nvidia-legacy.yaml, which points the
-#     build at ghcr.io/ublue-os/bazzite-nvidia:stable)
+# 1. Build the images. The variant name is also the tag, so `-t` is only an
+#    override (`--nvidia` is an alias for `--base-image nvidia`).
+dcli-bootc build                              # localhost/kineticos:default
+dcli-bootc build --nvidia                     # localhost/kineticos:nvidia
+dcli-bootc build --base-image nvidia-legacy   # localhost/kineticos:nvidia-legacy
+#    (base_images.nvidia-legacy in profile.yaml points the build at
+#     ghcr.io/ublue-os/bazzite-nvidia:stable)
+dcli-bootc build --base-image deck            # localhost/kineticos:deck
+#    (base_images.deck points the build at ghcr.io/ublue-os/bazzite-deck:stable)
 
 # 2. Push to ghcr (needed by the installed system, and by build-iso.sh's
 #    default pull). Log in as the GitHub user that owns the package:
@@ -164,16 +176,20 @@ sudo skopeo copy containers-storage:localhost/kineticos:nvidia \
   docker://ghcr.io/theblack-don/kineticos:nvidia
 sudo skopeo copy containers-storage:localhost/kineticos:nvidia-legacy \
   docker://ghcr.io/theblack-don/kineticos:nvidia-legacy
+sudo skopeo copy containers-storage:localhost/kineticos:deck \
+  docker://ghcr.io/theblack-don/kineticos:deck
 
 # 3. Build the ISOs
 ./build-iso.sh                                      # output/kineticos-<date>.iso
 ./build-iso.sh nvidia                               # output/kineticos-nvidia-<date>.iso
 ./build-iso.sh nvidia-legacy                        # output/kineticos-nvidia-legacy-<date>.iso
+./build-iso.sh deck                                 # output/kineticos-deck-<date>.iso
 ```
 
 The variant selects the kickstart (`disk_config/iso-kineticos.toml`,
-`disk_config/iso-kineticos-nvidia.toml` or
-`disk_config/iso-kineticos-nvidia-legacy.toml`) and the output filename.
+`disk_config/iso-kineticos-nvidia.toml`,
+`disk_config/iso-kineticos-nvidia-legacy.toml` or
+`disk_config/iso-kineticos-deck.toml`) and the output filename.
 `build-iso.sh`
 pulls `ghcr.io/theblack-don/kineticos:<variant>` into rootful podman storage; set
 `LOCAL=1` to use an image you built locally instead.

@@ -35,6 +35,7 @@ kinpkg — native RPMs into the persistent /usr overlay
   kinpkg update            update the system image (and overlay packages)
   kinpkg install PKG...    install package(s) into the overlay
   kinpkg install FILE.rpm  install local .rpm file(s) into the overlay
+  kinpkg reinstall PKG...  reinstall overlay package(s) (repair)
   kinpkg remove PKG...     remove package(s) from the overlay
   kinpkg overlay-upgrade   upgrade overlay-installed packages only
   kinpkg sync              distro-sync overlay packages against the new base
@@ -54,6 +55,8 @@ Notes:
     shadow the base image and are shared across rollbacks.
   * kernel/nvidia/akmods/bazzite packages are blocked — bake those into the
     image via modules/*.yaml instead.
+  * 'kinpkg reinstall' only repairs overlay packages; base-image packages are
+    refused (reinstalling one would shadow the image, breaking atomicity).
   * Disable the overlay entirely: touch /var/lib/kineticos/overlay/disabled
 EOF
 }
@@ -122,6 +125,20 @@ all() {
 
 overlay_pkgs() { all "$RECORD"; }
 local_pkgs() { all "$RPM_RECORD"; }
+
+# Fail unless every named package is managed by the overlay. Reinstall is a
+# repair path for overlay packages only: reinstalling a base-image package
+# would extract its files into the overlay upperdir and shadow the image (no
+# atomicity, shared across rollbacks).
+require_overlay_pkg() {
+    local n
+    for n in "$@"; do
+        if grep -qxF "$n" "$RECORD" 2>/dev/null || grep -qxF "$n" "$RPM_RECORD" 2>/dev/null; then
+            continue
+        fi
+        die "'$n' is not an overlay package — only packages installed with kinpkg/ki can be reinstalled. Base-image packages belong in modules/*.yaml; update with 'sudo dnf update'."
+    done
+}
 
 # Upgrade only the packages already installed in the overlay. This is the
 # overlay-only step dcli-bootc runs during a rebuild; `kinpkg overlay-upgrade`
@@ -197,6 +214,60 @@ case "$cmd" in
             mkdir -p "$LOCAL_DIR"
             install -m 0644 "$f" "$LOCAL_DIR/$local_name.rpm"
             record "$RPM_RECORD" "$local_name"
+        done
+        ;;
+    reinstall|rein)
+        # Repair path: reinstall overlay packages in place, from the repo or
+        # from the staged local .rpm copy. Restricted to overlay packages.
+        [[ $# -gt 0 ]] || die "reinstall: nothing to reinstall"
+        require_overlay
+
+        repo_specs=()
+        local_files=()
+        for spec in "$@"; do
+            if [[ "$spec" == *.rpm && -f "$spec" ]]; then
+                local_files+=("$spec")
+            else
+                repo_specs+=("$spec")
+            fi
+        done
+
+        if [[ ${#repo_specs[@]} -gt 0 ]]; then
+            names=()
+            for spec in "${repo_specs[@]}"; do
+                name="$(rpm -q --qf '%{NAME}' -- "$spec" 2>/dev/null)" \
+                    || die "reinstall: '$spec' is not installed"
+                names+=("$name")
+            done
+            check_blocked "${names[@]}"
+            require_overlay_pkg "${names[@]}"
+            repo_names=()
+            local_names=()
+            for n in "${names[@]}"; do
+                if [[ -f "$RPM_RECORD" ]] && grep -qxF "$n" "$RPM_RECORD"; then
+                    local_names+=("$n")
+                else
+                    repo_names+=("$n")
+                fi
+            done
+            if [[ ${#repo_names[@]} -gt 0 ]]; then
+                "$DNF" reinstall "${YES[@]}" -- "${repo_names[@]}"
+            fi
+            for n in "${local_names[@]}"; do
+                staged="$LOCAL_DIR/$n.rpm"
+                [[ -f "$staged" ]] || die "reinstall: no staged copy of '$n'"
+                "$DNF" reinstall "${YES[@]}" "$staged"
+            done
+        fi
+
+        for f in "${local_files[@]}"; do
+            local_name="$(rpm -qp --qf '%{NAME}' "$f")"
+            [[ -n "$local_name" ]] || die "could not read a package name from '$f'"
+            check_blocked "$local_name"
+            require_overlay_pkg "$local_name"
+            staged="$LOCAL_DIR/$local_name.rpm"
+            [[ -f "$staged" ]] || die "reinstall: no staged copy of '$local_name'"
+            "$DNF" reinstall "${YES[@]}" "$staged"
         done
         ;;
     remove|rm)

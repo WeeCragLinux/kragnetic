@@ -85,9 +85,11 @@ same build script is used for every variant — switching is just
 
 ## Building
 
-`dcli-bootc` is not part of the base image, so install it on the atomic host
-first. Layering it with `rpm-ostree` keeps the host image consistent with the
-Atomic model (don't use `dnf install`):
+KineticOS bakes `dcli-bootc` into the image (see `modules/system.yaml`), so on
+an existing KineticOS install it is already on `PATH` — skip to `dcli-bootc
+gen`. To build from the repo on a plain Bazzite host you need it first; the
+recommended way is to bake it into the image, but on a throwaway build host you
+can enable the COPR and layer it with `rpm-ostree`:
 
 ```bash
 # Add the dcli-bootc COPR repo, then layer the package
@@ -99,6 +101,12 @@ sudo systemctl reboot
 
 `rpm-ostree` stages the package into a new deployment, so the reboot is
 required before `dcli-bootc` is on `PATH`.
+
+!!! warning "Layering marks the deployment `incompatible`"
+    Once anything is layered with `rpm-ostree`, bootc marks the deployment
+    `incompatible` and system mutations must go through `rpm-ostree` rather
+    than `bootc`. That is fine on a dedicated builder; if you drive the
+    machine with `dcli-bootc`, bake it into the image instead.
 
 Then build the image:
 
@@ -129,7 +137,7 @@ KineticOS is an image-based OS, so an update stages a new bootc deployment.
 The normal Fedora commands work:
 
 ```bash
-sudo dnf update      # or: sudo kin update
+sudo dnf update      # or: sudo ki update
 ```
 
 KineticOS picks the right source automatically:
@@ -167,21 +175,23 @@ The image bakes its own project source into `/usr/share/kineticos/project`, so
 you can build on top of it or take the full recipe with you:
 
 ```bash
-dcli-bootc init my-image             # prompted: Extend or Fork
-dcli-bootc init --extend my-image    # add your own modules on top of kineticos
-dcli-bootc init --fork my-image      # full copy you own and can rebuild anywhere
+dcli-bootc init my-image              # kineticos: prompted Extend/Fork
+dcli-bootc init --extend my-image     # layer on the running image
+dcli-bootc init --fork my-image       # full copy for full control
+dcli-bootc init --from-image my-image # generic layer on any bootc host
+dcli-bootc init --template <dir> my-image
 ```
 
-* **Extend** keeps `base_image` pointing at the kineticos image, so kineticos
-  continues to manage the base and your project receives its updates. Add your
-  packages/files/services in new modules; the upstream modules are read-only
-  in `/usr/share/kineticos/project` for reference.
-* **Fork** copies the complete project (modules, files, dotfiles) so you can
-  change anything, including switching the base image. You then take over
-  upstream updates.
+* **Extend** (recommended) sets `base_image` to the image the system tracks, so
+  kineticos keeps managing the base and its updates flow through automatically.
+  Add your own packages/files/services in new modules; the upstream recipe stays
+  read-only in `/usr/share/kineticos/project` for reference.
+* **Fork** copies the complete kineticos project for full control. `base_image`
+  stays the template's base (Bazzite), so you take over upstream updates.
 
-Overlay packages you installed live are recorded into the new project's
-`modules/overlay-packages.yaml` automatically.
+Non-interactive `init` on kineticos defaults to **Extend**. Either way the
+project gets its own `modules/overlay-packages.yaml`, seeded from the live
+overlay, so packages you installed live carry over and stay editable.
 
 ## Project Structure
 
@@ -193,6 +203,7 @@ KineticOS/
 │   ├── kineticwe.yaml  # KineticWE + deps
 │   ├── session.yaml    # Session packages
 │   ├── greeter.yaml    # greetd login manager
+│   ├── branding.yaml   # os-release branding (KineticOS identity)
 │   ├── deck.yaml       # Steam Deck base (Gaming Mode + KineticWE desktop)
 │   ├── system.yaml     # dcli-bootc
 │   ├── terra.yaml      # Terra repo (Fyra Labs)
@@ -211,8 +222,9 @@ the rpmdb lives in `/usr/share/rpm`, inside the overlay.
 
 ```bash
 sudo kinpkg install <pkg>   # native RPM, survives image updates
+sudo kinpkg reinstall <pkg> # repair an overlay-installed package
 sudo kinpkg remove <pkg>
-sudo kin update             # update the system image (and overlay packages)
+sudo ki update               # update the system image (and overlay packages)
 sudo kinpkg overlay-upgrade # upgrade overlay-installed packages only
 sudo kinpkg sync            # distro-sync overlay packages against the new base
 kinpkg list
@@ -237,11 +249,12 @@ then passes `-y` to `kinpkg` for its automated sync/upgrade.
 
 Plain `dnf` works too: the Atomic shim that errors on `dnf install` is replaced
 (in the overlay module) with a guard. `install`/`remove` are routed through
-`kinpkg`, and `dnf update`/`dnf upgrade` stage a system image update (see
-above); the remaining mutating operations (`downgrade`, `distro-sync`,
-`reinstall`, `swap`, `autoremove`, `group install`, …) are **refused** — they
-would write into the overlay, shadow the image and break rollbacks — and point
-you at `sudo dnf update` / `sudo kinpkg sync`.
+`kinpkg`, `reinstall` through `kinpkg` for overlay packages only, and
+`dnf update`/`dnf upgrade` stage a system image update (see above); the
+remaining mutating operations (`downgrade`, `distro-sync`, `swap`,
+`autoremove`, `group install`, …) are **refused** — they would write into the
+overlay, shadow the image and break rollbacks — and point you at
+`sudo dnf update` / `sudo kinpkg sync`.
 Read-only commands go to the real dnf5 at `/usr/libexec/dnf5`. The guard covers
 `dnf5`, `yum` and `microdnf` too, so there is no unguarded dnf path.
 
@@ -265,8 +278,8 @@ Disable the overlay: `sudo touch /var/lib/kineticos/overlay/disabled && reboot`.
 
 ## Repository Modules
 
-Both repo modules below ship **disabled** by default. Uncomment the matching
-entry in `enabled_modules` (`profile.yaml`) to turn one on.
+The repo module below ships **disabled** by default. Uncomment its entry in
+`enabled_modules` (`profile.yaml`) to turn it on.
 
 ### Terra Repository
 

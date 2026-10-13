@@ -12,11 +12,12 @@
 # atomicity.
 #
 # Behaviour:
-#   * install / remove                                    -> kinpkg
-#     (its base-package guardrails and its record of overlay packages)
+#   * install / remove / reinstall                        -> kinpkg
+#     (its base-package guardrails and its record of overlay packages;
+#      reinstall is overlay-packages-only)
 #   * update / upgrade                                    -> kineticos-update
 #     (stages a new bootc deployment — the image, not the overlay)
-#   * downgrade / distro-sync / reinstall / swap /
+#   * downgrade / distro-sync / swap /
 #     autoremove / system-level verbs                    -> refused (exit 1)
 #   * group/environment install|remove|upgrade            -> refused (exit 1)
 #   * everything else (search, info, repoquery, clean, …) -> /usr/libexec/dnf5
@@ -91,7 +92,7 @@ kineticos: refusing a system-level package operation through dnf.
   the image's packages through dnf writes into the overlay, shadows the image,
   and breaks bootc rollbacks.
 
-  System image update:    sudo dnf update      (or: sudo kin update)
+  System image update:    sudo dnf update      (or: sudo ki update)
   Overlay packages only:  sudo kinpkg overlay-upgrade
   Reconcile overlay set:  sudo kinpkg sync
 
@@ -129,7 +130,7 @@ EOF
         done
         exec /usr/libexec/kineticos-update "${update_args[@]}"
         ;;
-    distro-sync|dsync|downgrade|dg|reinstall|swap|replay|debuginfo-install|offline-upgrade|offline-distrosync|system-upgrade)
+    distro-sync|dsync|downgrade|dg|swap|replay|debuginfo-install|offline-upgrade|offline-distrosync|system-upgrade)
         refuse_system
         ;;
     group|environment)
@@ -152,9 +153,9 @@ esac
 # (optionally preceded by -y), so anything else is refused rather than handed
 # to raw dnf5.
 case "$cmd" in
-    install|in|remove|rm)
+    install|in|remove|rm|reinstall|rein)
         case "${1:-}" in
-            install|in|remove|rm|-y|--yes|--assumeyes)
+            install|in|remove|rm|reinstall|rein|-y|--yes|--assumeyes)
                 exec "$KINPKG" "$@"
                 ;;
             *)

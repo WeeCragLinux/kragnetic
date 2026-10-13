@@ -3,7 +3,7 @@
 #
 # KineticOS is an image-based (bootc) OS, so "update the system" means staging
 # a new bootc deployment, not a dnf transaction. `sudo dnf update`/`upgrade`
-# and `sudo kin update`/`upgrade` all land here.
+# and `sudo ki update`/`upgrade` all land here.
 #
 # There are two kinds of installation, told apart by how bootc tracks the
 # image:
@@ -33,7 +33,7 @@ Options:
       --reboot             reboot automatically when a new deployment is staged
   -h, --help               show this help
 
-Normally reached through `sudo dnf update` or `sudo kin update`.
+Normally reached through `sudo dnf update` or `sudo ki update`.
 EOF
 }
 

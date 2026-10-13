@@ -137,20 +137,10 @@ scripts:
     rm -f /usr/share/applications/discourse.desktop
     rm -f /usr/share/applications/bazzite-documentation.desktop
     rm -f /usr/share/applications/system-update.desktop
-    # Remove KDE desktop entries, but keep the ones belonging to apps KineticOS
-    # installs on purpose:
-    #   * Spectacle: its /usr/share/kglobalaccel/org.kde.spectacle.desktop entry
-    #     is a symlink to /usr/share/applications/org.kde.spectacle.desktop, and
-    #     the embedded kglobalaccel discovers Spectacle's global shortcuts by
-    #     reading that file. Deleting it leaves a dangling symlink, so the
-    #     Spectacle component never appears in Kinetic Settings -> Keybinds.
-    #   * Dolphin and Konsole: installed by the kineticwe module, so their
-    #     launchers must survive or the apps look uninstalled.
-    rm -f /usr/share/applications/kde-*.desktop
-    find /usr/share/applications -maxdepth 1 -name 'org.kde.*.desktop' \
-        ! -name 'org.kde.spectacle.desktop' \
-        ! -name 'org.kde.dolphin.desktop' \
-        ! -name 'org.kde.konsole.desktop' -delete
+    # NOTE: desktop entries are not deleted by hand here. `dnf remove` below
+    # erases every file owned by the packages it drops (including their
+    # .desktop entries), and leaving still-installed packages' launchers alone
+    # keeps `kinpkg install`/`reinstall` able to restore them.
     # Remove SDDM config
     rm -rf /etc/sddm.conf.d
     rm -f /etc/sddm.conf

@@ -196,6 +196,91 @@ pulls `ghcr.io/theblack-don/kineticos:<variant>` into rootful podman storage; se
 
 ---
 
+## Publishing the ISOs to Cloudflare R2
+
+The installer ISOs are far too big for Cloudflare Pages (25 MiB/file limit) and
+for `wrangler` (300 MiB cap on `r2 object put` — the dashboard has the same
+cap). They live in an **R2 bucket**, served from a custom domain with **zero
+egress fees**.
+
+### One-time setup
+
+1. **Create the bucket.** Cloudflare dashboard → R2 → *Create bucket* →
+   `kineticos-isos`.
+2. **Attach a domain.** Bucket → *Settings* → *Custom Domains* → *Connect
+   Domain* → `dl.theblackdon.dev`. Cloudflare creates the DNS record.
+3. **Create an API token.** R2 → *API* → *Manage API Tokens* → *Create API
+   Token*. Permissions **Object Read & Write**, scoped to `kineticos-isos`.
+   Note the **Access Key ID** and **Secret Access Key**.
+4. **Install rclone** (no root needed, works on an immutable host):
+
+   ```bash
+   curl -LO https://downloads.rclone.org/rclone-current-linux-amd64.zip
+   unzip -o rclone-current-linux-amd64.zip
+   install -m755 rclone-*/rclone ~/.local/bin/rclone
+   ```
+
+5. **Configure rclone.** `<ACCOUNT_ID>` is under R2 → *Account Details*:
+
+   ```bash
+   rclone config create r2 s3 \
+     provider=Cloudflare \
+     access_key_id='<ACCESS_KEY_ID>' \
+     secret_access_key='<SECRET_ACCESS_KEY>' \
+     endpoint='https://<ACCOUNT_ID>.r2.cloudflarestorage.com' \
+     acl=private
+   ```
+
+### Upload
+
+Use **stable object names** (`kineticos.iso`, not the dated filename) so the
+website links never change. Upload the variants you ship (the website currently
+links default, nvidia and nvidia-legacy):
+
+```bash
+cd output
+rclone copyto kineticos-<date>.iso \
+  r2:kineticos-isos/kineticos.iso \
+  --s3-no-check-bucket --s3-upload-cutoff 256M --s3-chunk-size 256M --progress
+rclone copyto kineticos-nvidia-<date>.iso \
+  r2:kineticos-isos/kineticos-nvidia.iso \
+  --s3-no-check-bucket --s3-upload-cutoff 256M --s3-chunk-size 256M --progress
+rclone copyto kineticos-nvidia-legacy-<date>.iso \
+  r2:kineticos-isos/kineticos-nvidia-legacy.iso \
+  --s3-no-check-bucket --s3-upload-cutoff 256M --s3-chunk-size 256M --progress
+```
+
+- `--s3-no-check-bucket` is **required**: the scoped token can't `CreateBucket`,
+  which rclone otherwise tries as a pre-flight check (fails with
+  `AccessDenied`).
+- rclone does multipart uploads automatically, so there is no size limit.
+
+The ISOs then serve at:
+
+```
+https://dl.theblackdon.dev/kineticos.iso
+https://dl.theblackdon.dev/kineticos-nvidia.iso
+https://dl.theblackdon.dev/kineticos-nvidia-legacy.iso
+```
+
+### Verify
+
+```bash
+rclone lsjson --hash r2:kineticos-isos     # note the md5 of each object
+md5sum output/kineticos-<date>.iso          # must match
+```
+
+### Update the website checksums
+
+`blackdonwebsite/kineticwe.html` has a SHA256 under *KineticOS ISO Images*.
+After each new upload, replace the matching line with the new `sha256sum`:
+
+```bash
+sha256sum output/kineticos-<date>.iso
+```
+
+---
+
 ## Caveats
 
 - **ISO storage is large.** Each ISO is several GB and GitLab's free tier has a

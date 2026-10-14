@@ -139,11 +139,26 @@ echo
 confirm "Stage the update now?" || { echo "  Cancelled."; exit 0; }
 
 before="$(booted_digest)"
+pre_staged="$(staged_digest)"
 bootc upgrade
-after="$(staged_digest)"
+post_staged="$(staged_digest)"
 
+# Distinguish a deployment staged by *this* run from one that was already
+# staged (or from a no-op). `before` is the booted digest; a staged deployment
+# is only worth rebooting into if it differs from what is running.
 staged=0
-if [[ -n "$after" && "$after" != "$before" ]]; then
+if [[ -z "$post_staged" ]]; then
+    echo
+    echo "Already up to date — no new deployment staged."
+elif [[ "$post_staged" == "$before" ]]; then
+    echo
+    echo "Already up to date — the staged image matches the running one."
+elif [[ -n "$pre_staged" && "$post_staged" == "$pre_staged" ]]; then
+    staged=1
+    echo
+    echo "A deployment is already staged (unchanged by this run):"
+    echo "    $(staged_ref)"
+else
     staged=1
     echo
     echo "New deployment staged:"

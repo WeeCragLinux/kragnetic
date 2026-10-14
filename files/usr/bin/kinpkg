@@ -94,6 +94,23 @@ check_blocked() {
     done
 }
 
+# resolve_names SPEC...  (print the installed package name(s) each spec resolves
+# to). A spec can be a capability or a file path (python, nvim, pkexec,
+# /usr/bin/nvim), which `dnf install` resolves to a package but `rpm -q <spec>`
+# does not. Both rpm queries print their failure message to *stdout*, so output
+# is only used when the query succeeds; a spec that resolves to nothing is
+# dropped rather than recorded as a bogus "package X is not installed" line.
+resolve_names() {
+    local spec out
+    for spec in "$@"; do
+        if out="$(rpm -q --qf '%{NAME}\n' -- "$spec" 2>/dev/null)"; then
+            printf '%s\n' "$out"
+        elif out="$(rpm -q --whatprovides --qf '%{NAME}\n' -- "$spec" 2>/dev/null)"; then
+            printf '%s\n' "$out"
+        fi
+    done
+}
+
 # record FILE PKG...  (append names not already present)
 record() {
     local file=$1; shift
@@ -116,11 +133,13 @@ unrecord() {
     mv "$tmp" "$file"
 }
 
-# all FILE  (sorted, unique, comments/blanks dropped)
+# all FILE  (sorted, unique; comments/blanks and rpm error lines dropped)
 all() {
     local file=$1
     [[ -f "$file" ]] || return 0
-    grep -vE '^[[:space:]]*(#|$)' "$file" | sort -u
+    grep -vE '^[[:space:]]*(#|$)' "$file" \
+        | grep -vE '^package .* is not installed$' \
+        | sort -u
 }
 
 overlay_pkgs() { all "$RECORD"; }
@@ -140,13 +159,32 @@ require_overlay_pkg() {
     done
 }
 
+# overlay_installed  (print recorded overlay packages that are actually present
+# in the merged rpmdb; warn about the rest). A stale or corrupted record entry
+# must never abort the whole dnf transaction.
+overlay_installed() {
+    local -a recorded
+    local -a installed=()
+    local p
+    mapfile -t recorded < <(overlay_pkgs)
+    for p in "${recorded[@]}"; do
+        if rpm -q --qf '%{NAME}' -- "$p" >/dev/null 2>&1; then
+            installed+=("$p")
+        else
+            echo "kinpkg: ignoring recorded overlay package not installed: $p" >&2
+        fi
+    done
+    [[ ${#installed[@]} -gt 0 ]] || return 1
+    printf '%s\n' "${installed[@]}"
+}
+
 # Upgrade only the packages already installed in the overlay. This is the
 # overlay-only step dcli-bootc runs during a rebuild; `kinpkg overlay-upgrade`
 # exposes it directly.
 overlay_upgrade() {
     require_overlay
     local -a pkgs
-    mapfile -t pkgs < <(overlay_pkgs)
+    mapfile -t pkgs < <(overlay_installed)
     [[ ${#pkgs[@]} -gt 0 ]] || { echo "kinpkg: no overlay packages to upgrade"; return 0; }
     "$DNF" upgrade "${YES[@]}" -- "${pkgs[@]}"
 }
@@ -201,7 +239,7 @@ case "$cmd" in
         if [[ ${#repo_specs[@]} -gt 0 ]]; then
             check_blocked "${repo_specs[@]}"
             "$DNF" install "${YES[@]}" "${repo_specs[@]}"
-            mapfile -t names < <(rpm -q --qf '%{NAME}\n' -- "${repo_specs[@]}")
+            mapfile -t names < <(resolve_names "${repo_specs[@]}")
             record "$RECORD" "${names[@]}"
         fi
 
@@ -304,7 +342,7 @@ case "$cmd" in
         ;;
     sync)
         require_overlay
-        mapfile -t pkgs < <(overlay_pkgs)
+        mapfile -t pkgs < <(overlay_installed)
         [[ ${#pkgs[@]} -gt 0 ]] || { echo "kinpkg: no overlay packages to sync"; exit 0; }
         "$DNF" distro-sync "${YES[@]}" -- "${pkgs[@]}"
         ;;

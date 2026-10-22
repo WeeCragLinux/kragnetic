@@ -1,7 +1,7 @@
 description: KineticWE compositor + Noctalia greeter
 repos:
   copr:
-    - linuxgamerlife/lgl-experimental
+    - theblackdon/kwee
 packages:
   - kineticwe
   - kineticwe-greeter

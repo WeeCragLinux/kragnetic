@@ -237,6 +237,15 @@ automatically. To do it by hand, or to check for drift: `sudo kinpkg sync` and
 
 `ki` is a short alias for `kinpkg` (e.g. `sudo ki install <pkg>`).
 
+Packages removed from the base image by `modules/removals.yaml` are not blocked
+from `kinpkg`: they remain available from the Fedora repos and can be installed
+on demand into the overlay. For example, KineticOS removes the optional KDE
+apps `krfb`, `krdc`, `kfind`, and `kwrite`; reinstall one with:
+
+```bash
+sudo kinpkg install kwrite
+```
+
 Installing packages this way is safe across updates: `dcli-bootc build`/`update`
 never remove live overlay packages you did not declare, and they snapshot your
 live installs into the project automatically — no `dcli-bootc overlay import`

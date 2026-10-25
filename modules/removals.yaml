@@ -10,6 +10,8 @@ remove:
   - waydroid-nvidia-selinux
   - input-remapper
   - cardwire
+  # Terra-stuff
+  - terra-mangohud
   # Bazzite-specific tools
   - uupd
   - topgrade
@@ -100,6 +102,15 @@ remove:
   - krecorder
   - kmail
   - neochat
+  # Optional KDE apps: removed from the image by default, but NOT dnf-excluded.
+  # Users can add any of them back at runtime with `sudo kinpkg install <pkg>`;
+  # the overlay records them and they survive image updates. Keep these out of
+  # `kineticwe.yaml`/other enabled modules, or the build will reinstall them.
+  # (konsole is deliberately not listed here: kineticwe keeps it installed.)
+  - krfb
+  - krdc
+  - kfind
+  - kwrite
   # KDE Settings Modules
   - kcmshell
   - plasma-systemsettings

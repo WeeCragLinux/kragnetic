@@ -179,7 +179,19 @@ sudo skopeo copy containers-storage:localhost/kineticos:nvidia-legacy \
 sudo skopeo copy containers-storage:localhost/kineticos:deck \
   docker://ghcr.io/theblack-don/kineticos:deck
 
-# 3. Build the ISOs
+# 3. Verify the push actually landed. `skopeo copy` is quiet on success (it
+#    ends with "Writing manifest to image destination"), and re-pushing an
+#    identical image moves no blobs, so it can look like nothing happened.
+#    These read the registry, no credentials needed while the package is public:
+skopeo list-tags docker://ghcr.io/theblack-don/kineticos
+skopeo inspect docker://ghcr.io/theblack-don/kineticos:default | jq '{Digest,Labels}'
+
+# and confirm the registry holds the image you just built (rootful storage):
+sudo podman image inspect localhost/kineticos:default --format '{{.Digest}}'
+#    that digest must match the `Digest` from `skopeo inspect` above; if it
+#    doesn't, the copy did not complete and the tag still points at an older push
+
+# 4. Build the ISOs
 ./build-iso.sh                                      # output/kineticos-<date>.iso
 ./build-iso.sh nvidia                               # output/kineticos-nvidia-<date>.iso
 ./build-iso.sh nvidia-legacy                        # output/kineticos-nvidia-legacy-<date>.iso
@@ -193,6 +205,14 @@ The variant selects the kickstart (`disk_config/iso-kineticos.toml`,
 `build-iso.sh`
 pulls `ghcr.io/theblack-don/kineticos:<variant>` into rootful podman storage; set
 `LOCAL=1` to use an image you built locally instead.
+
+> **Where the package shows up on GitHub.** GHCR packages are user-scoped, so
+> `theblack-don/kineticos` lives at
+> `https://github.com/users/theblack-don/packages/container/package/kineticos`
+> and is listed under the **Packages** tab of your profile. It will not appear in
+> any repository's *Packages* sidebar: that sidebar only lists packages linked to
+> a repo on GitHub, and this project's repo is on GitLab. A successful push is
+> therefore confirmed with the `skopeo` checks above, not by looking at GitHub.
 
 ---
 

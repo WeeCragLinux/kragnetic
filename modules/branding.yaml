@@ -2,7 +2,7 @@ description: Brand the image as KineticOS in os-release
 scripts:
   post: |
     # bootc-image-builder derives the installer/ISO identity — the ISO boot
-    # menu entry and the "… 44" shown in Anaconda — from the image's
+    # menu entry and the release number shown in Anaconda — from the image's
     # os-release. /etc/os-release is a symlink to /usr/lib/os-release.
     #
     # Only the display identity is changed. ID, ID_LIKE and VERSION_ID keep

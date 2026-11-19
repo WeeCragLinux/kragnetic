@@ -8,10 +8,19 @@ services:
   - bootc-fetch-apply-updates.timer
 scripts:
   post: |
-    # Bazzite ships terra-mesa enabled (unlike terra/terra-extras, which are
-    # disabled). KineticOS keeps Terra off, and the enabled terra-mesa breaks
-    # bootc-image-builder's depsolve, which cannot read its file:// GPG key.
-    # Disable it so the built image matches the rest of Terra.
-    if [ -f /etc/yum.repos.d/terra-mesa.repo ]; then
-      sed -i 's/^enabled=1$/enabled=0/' /etc/yum.repos.d/terra-mesa.repo
+    # BIB's legacy anaconda-iso solver only reads /etc/yum.repos.d. Fedora 45
+    # keeps the Fedora repos in /usr/share/dnf5/repos.d, so mirror them into
+    # /etc/yum.repos.d or the ISO build sees only COPR repos and cannot
+    # resolve the installer packages. Terra stays disabled: BIB cannot read
+    # its file:// GPG keys.
+    if [ -d /usr/share/dnf5/repos.d ]; then
+      for repo in /usr/share/dnf5/repos.d/*.repo; do
+        [ -f "$repo" ] || continue
+        install -m 0644 "$repo" "/etc/yum.repos.d/$(basename "$repo")"
+      done
     fi
+    for repo in /etc/yum.repos.d/terra*.repo; do
+      if [ -f "$repo" ]; then
+        sed -i 's/^enabled=1$/enabled=0/' "$repo"
+      fi
+    done

@@ -73,7 +73,7 @@ sudo podman run \
   --use-librepo=True \
   "localhost/${IMAGE_NAME}:${TAG}"
 
-sudo chown -R "$USER:$USER" output/
+sudo chown -R "$USER:$(id -gn)" output/
 
 DATE="$(date +%Y%m%d)"
 FINAL="output/${ISO_STEM}-${DATE}.iso"

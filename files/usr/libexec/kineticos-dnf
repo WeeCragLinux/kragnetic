@@ -86,7 +86,7 @@ done
 # would write into the overlay, shadowing the image and breaking rollbacks.
 refuse_system() {
     cat >&2 <<'EOF'
-kineticos: refusing a system-level package operation through dnf.
+kragnetic: refusing a system-level package operation through dnf.
 
   /usr is a persistent overlay managed declaratively by dcli-bootc. Changing
   the image's packages through dnf writes into the overlay, shadows the image,
@@ -106,7 +106,7 @@ case "$cmd" in
         # the base image provides — unlinking them through /usr leaves overlayfs
         # whiteouts that hide the base copies permanently.
         cat >&2 <<'EOF'
-kineticos: refusing 'autoremove'.
+kragnetic: refusing 'autoremove'.
 
   Autoremove reasons over the merged rpmdb and can remove packages the base
   image provides, leaving overlayfs whiteouts that hide them permanently.
@@ -159,7 +159,7 @@ case "$cmd" in
                 exec "$KINPKG" "$@"
                 ;;
             *)
-                echo "kineticos: unsupported invocation of '$cmd' — put global options after the command, or run 'sudo kinpkg $cmd ...'" >&2
+                echo "kragnetic: unsupported invocation of '$cmd' — put global options after the command, or run 'sudo kinpkg $cmd ...'" >&2
                 exit 1
                 ;;
         esac

@@ -1,0 +1,25 @@
+description: Applications installed into the image
+
+repos:
+  copr:
+    - linuxgamerlife/lgl-toolkit
+  rpm_urls:
+    - name: vivaldi
+      baseurl: https://repo.vivaldi.com/archive/rpm/x86_64/
+      gpgkey: https://repo.vivaldi.com/archive/linux_signing_key.pub
+
+packages:
+  - lgl-text-editor
+  - lgl-powerprofile-manager
+  - lgl-scheduler-manager
+  - vivaldi-stable
+
+scripts:
+  # Vivaldi's RPM installs its payload under /opt. On Bazzite /opt is a
+  # symlink to machine-local /var/opt, which is not part of the image, so
+  # stage it under /var before the transaction and promote it to a real
+  # /opt afterwards.
+  pre: |
+    if [ -L /opt ]; then mkdir -p /var/opt; fi
+  post: |
+    if [ -L /opt ] && [ -d /var/opt ]; then rm -f /opt; mv /var/opt /opt; fi

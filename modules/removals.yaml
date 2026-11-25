@@ -86,12 +86,11 @@ remove:
   - plasma-desktoptheme
   # `sddm` is deliberately NOT listed for removal: dnf drags it out as a
   # dependent anyway (via `sddm-kcm`, and orphan cleanup), so the desktop
-  # variants still lose it, but the Steam Deck variant can reinstall it cleanly.
-  # Listing it here would make dcli-bootc's package verification fail on the
-  # deck build, which legitimately needs SDDM present.
+  # variants still lose it. Leaving it unlisted keeps package verification
+  # happy without having to model that dependency chain here.
   - sddm-kcm
   # KDE Apps (not needed)
-  - ark
+  - kate
   - gwenview
   - elisa
   - okular

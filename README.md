@@ -1,4 +1,4 @@
-# KineticOS
+# Kragnetic
 
 A minimal Fedora-based bootc image featuring the KineticWE tiling Wayland compositor.
 
@@ -8,11 +8,10 @@ A minimal Fedora-based bootc image featuring the KineticWE tiling Wayland compos
 - **Kernel**: Bazzite/OGC kernel with NVIDIA support
 - **Desktop**: KineticWE (from experimental COPR)
 - **Greeter**: Noctalia greeter via greetd
-- **Deck variant**: Steam Gaming Mode via SDDM + gamescope, KineticWE in Desktop Mode
 
 ## Base images and variants
 
-KineticOS builds several variants. `profile.yaml` declares the default image
+Kragnetic builds several variants. `profile.yaml` declares the default image
 plus a `base_images` map of named variants:
 
 ```yaml
@@ -21,7 +20,6 @@ base_image: ghcr.io/ublue-os/bazzite:stable              # default, AMD / Intel
 base_images:
   nvidia: ghcr.io/ublue-os/bazzite-nvidia-open:stable    # NVIDIA (open)
   nvidia-legacy: ghcr.io/ublue-os/bazzite-nvidia:stable # NVIDIA (proprietary)
-  deck: ghcr.io/ublue-os/bazzite-deck:stable             # Steam Deck / gaming
 ```
 
 Select a variant at build time with `--base-image <name>`. The variant name is
@@ -31,7 +29,6 @@ also the image tag, so `-t` is only needed to override it:
 dcli-bootc build                              # AMD / Intel        → :default
 dcli-bootc build --nvidia                     # NVIDIA open        → :nvidia
 dcli-bootc build --base-image nvidia-legacy   # NVIDIA proprietary → :nvidia-legacy
-dcli-bootc build --base-image deck            # Steam Deck         → :deck
 ```
 
 `--nvidia` is an alias for `--base-image nvidia`. Because the variant name is
@@ -49,7 +46,6 @@ matching registry tag:
 ./build-iso.sh                # :default
 ./build-iso.sh nvidia         # :nvidia
 ./build-iso.sh nvidia-legacy  # :nvidia-legacy
-./build-iso.sh deck           # :deck
 ```
 
 So to move a machine from the NVIDIA base to the stable AMD base, build or
@@ -67,26 +63,10 @@ If this project only ever targets AMD, drop the `nvidia` (and other) entries
 from `base_images`. `--nvidia` then falls back to `base_image`, so no NVIDIA
 base can be pulled by accident.
 
-## Steam Deck variant
-
-The `:deck` variant is built on Bazzite's Steam Deck base (`bazzite-deck:stable`)
-and targets handhelds/HTPCs that should boot straight into Steam Gaming Mode:
-
-```bash
-dcli-bootc build --base-image deck   # → localhost/kineticos:deck
-./build-iso.sh deck                  # → output/kineticos-deck-<date>.iso
-```
-
-It boots into Gaming Mode (SDDM autologin to the gamescope/Steam session),
-and switching to Desktop Mode launches **KineticWE** instead of KDE. The wiring
-lives in `modules/deck.yaml`, which self-guards on the deck base image, so the
-same build script is used for every variant — switching is just
-`--base-image deck`.
-
 ## Building
 
-KineticOS bakes `dcli-bootc` into the image (see `modules/system.yaml`), so on
-an existing KineticOS install it is already on `PATH` — skip to `dcli-bootc
+Kragnetic bakes `dcli-bootc` into the image (see `modules/system.yaml`), so on
+an existing Kragnetic install it is already on `PATH` — skip to `dcli-bootc
 gen`. To build from the repo on a plain Bazzite host you need it first; the
 recommended way is to bake it into the image, but on a throwaway build host you
 can enable the COPR and layer it with `rpm-ostree`:
@@ -112,7 +92,7 @@ Then build the image:
 
 ```bash
 # Enter the repo (init already done by cloning)
-cd kineticos
+cd kragnetic
 
 # Generate Containerfile and build script
 dcli-bootc gen
@@ -133,20 +113,20 @@ dcli-bootc build
 
 ## Updating
 
-KineticOS is an image-based OS, so an update stages a new bootc deployment.
+Kragnetic is an image-based OS, so an update stages a new bootc deployment.
 The normal Fedora commands work:
 
 ```bash
 sudo dnf update      # or: sudo ki update
 ```
 
-KineticOS picks the right source automatically:
+Kragnetic picks the right source automatically:
 
-* A normal install tracks `ghcr.io/theblack-don/kineticos:<variant>`, so the
+* A normal install tracks `ghcr.io/weecraglinux/kragnetic:<variant>`, so the
   update pulls the published image (`bootc upgrade`) — the same thing the
   `bootc-fetch-apply-updates.timer` baked into the image runs on its own.
 * A machine built with `dcli-bootc init --extend` tracks its own local image,
-  so the update rebuilds that project on the latest KineticOS base
+  so the update rebuilds that project on the latest Kragnetic base
   (`dcli-bootc update`) and switches to it.
 
 Either way the new deployment is staged, overlay packages are refreshed, and
@@ -175,7 +155,7 @@ The image bakes its own project source into `/usr/share/kineticos/project`, so
 you can build on top of it or take the full recipe with you:
 
 ```bash
-dcli-bootc init my-image              # kineticos: prompted Extend/Fork
+dcli-bootc init my-image              # kragnetic: prompted Extend/Fork
 dcli-bootc init --extend my-image     # layer on the running image
 dcli-bootc init --fork my-image       # full copy for full control
 dcli-bootc init --from-image my-image # generic layer on any bootc host
@@ -183,28 +163,28 @@ dcli-bootc init --template <dir> my-image
 ```
 
 * **Extend** (recommended) sets `base_image` to the image the system tracks, so
-  kineticos keeps managing the base and its updates flow through automatically.
+  Kragnetic keeps managing the base and its updates flow through automatically.
   Add your own packages/files/services in new modules; the upstream recipe stays
   read-only in `/usr/share/kineticos/project` for reference.
-* **Fork** copies the complete kineticos project for full control. `base_image`
+* **Fork** copies the complete Kragnetic project for full control. `base_image`
   stays the template's base (Bazzite), so you take over upstream updates.
 
-Non-interactive `init` on kineticos defaults to **Extend**. Either way the
+Non-interactive `init` on Kragnetic defaults to **Extend**. Either way the
 project gets its own `modules/overlay-packages.yaml`, seeded from the live
 overlay, so packages you installed live carry over and stay editable.
 
 ## Project Structure
 
 ```
-KineticOS/
+Kragnetic/
 ├── profile.yaml        # Base image and enabled modules
 ├── modules/
 │   ├── removals.yaml   # Remove Bazzite/KDE packages
 │   ├── kineticwe.yaml  # KineticWE + deps
 │   ├── session.yaml    # Session packages
 │   ├── greeter.yaml    # greetd login manager
-│   ├── branding.yaml   # os-release branding (KineticOS identity)
-│   ├── deck.yaml       # Steam Deck base (Gaming Mode + KineticWE desktop)
+│   ├── branding.yaml   # os-release branding (Kragnetic identity)
+│   ├── installs.yaml   # LGL toolkit apps + Vivaldi
 │   ├── system.yaml     # dcli-bootc
 │   ├── terra.yaml      # Terra repo (Fyra Labs)
 │   └── overlay.yaml    # Persistent /usr overlay + kinpkg
@@ -239,7 +219,7 @@ automatically. To do it by hand, or to check for drift: `sudo kinpkg sync` and
 
 Packages removed from the base image by `modules/removals.yaml` are not blocked
 from `kinpkg`: they remain available from the Fedora repos and can be installed
-on demand into the overlay. For example, KineticOS removes the optional KDE
+on demand into the overlay. For example, Kragnetic removes the optional KDE
 apps `krfb`, `krdc`, `kfind`, and `kwrite`; reinstall one with:
 
 ```bash
@@ -268,7 +248,7 @@ Read-only commands go to the real dnf5 at `/usr/libexec/dnf5`. The guard covers
 `dnf5`, `yum` and `microdnf` too, so there is no unguarded dnf path.
 
 The guard only applies to a **booted** system. Inside an image build (for
-example `dcli-bootc init --extend` layering on a kineticos base) there is no
+example `dcli-bootc init --extend` layering on a Kragnetic base) there is no
 persistent `/usr` overlay, so the guard detects the missing `/run/ostree-booted`
 and delegates to the real dnf5 — build-time `dnf install` stays a normal image
 install instead of failing with "overlay not mounted".

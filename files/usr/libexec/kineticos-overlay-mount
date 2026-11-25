@@ -12,7 +12,7 @@ BASE=/var/lib/kineticos/overlay
 UPPER="$BASE/upper"
 WORK="$BASE/work"
 
-log() { echo "kineticos overlay: $*"; }
+log() { echo "kragnetic overlay: $*"; }
 
 # ── Reconcile the persistent rpmdb with the booted base image ──
 # /usr is an overlay, so the first rpm/dnf write copies the whole

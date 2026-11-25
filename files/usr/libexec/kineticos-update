@@ -1,14 +1,14 @@
 #!/usr/bin/bash
-# kineticos-update — the KineticOS system-update entry point.
+# kineticos-update — the Kragnetic system-update entry point.
 #
-# KineticOS is an image-based (bootc) OS, so "update the system" means staging
+# Kragnetic is an image-based (bootc) OS, so "update the system" means staging
 # a new bootc deployment, not a dnf transaction. `sudo dnf update`/`upgrade`
 # and `sudo ki update`/`upgrade` all land here.
 #
 # There are two kinds of installation, told apart by how bootc tracks the
 # image:
 #
-#   * registry-tracked (a normal install of ghcr.io/theblack-don/kineticos:*)
+#   * registry-tracked (a normal install of ghcr.io/weecraglinux/kragnetic:*)
 #       -> `bootc upgrade` pulls the published image. This is the same thing
 #          the bootc-fetch-apply-updates.timer runs automatically.
 #   * containers-storage-tracked (a `dcli-bootc init --extend` project)
@@ -24,7 +24,7 @@ PROG="${0##*/}"
 
 usage() {
     cat <<'EOF'
-kineticos-update — stage a KineticOS system image update
+kineticos-update — stage a Kragnetic system image update
 
   kineticos-update [OPTIONS]
 
@@ -47,7 +47,7 @@ for arg in "$@"; do
         -*) : ;;  # ignore other dnf flags (e.g. --refresh)
         *)
             echo "$PROG: '$arg' is not a system update." >&2
-            echo "  KineticOS updates the whole image; install or remove individual" >&2
+            echo "  Kragnetic updates the whole image; install or remove individual" >&2
             echo "  packages with 'sudo kinpkg install' / 'sudo kinpkg remove'." >&2
             exit 2
             ;;
@@ -108,7 +108,7 @@ image_ref="$(status_json | jq -r '.spec.image.image // .status.booted.image.imag
 
 if [[ "$transport" == "containers-storage" ]]; then
     # Locally-built image (a dcli-bootc `init --extend` project). Rebuilding the
-    # project is the only way it picks up a new KineticOS base.
+    # project is the only way it picks up a new Kragnetic base.
     echo "This system boots a locally-built image:"
     echo "    ${image_ref:-unknown}"
     echo "Rebuilding it on the latest base with 'dcli-bootc update' ..."
@@ -116,7 +116,7 @@ if [[ "$transport" == "containers-storage" ]]; then
     command -v dcli-bootc >/dev/null 2>&1 || {
         echo "$PROG: dcli-bootc not found — cannot rebuild the project." >&2
         echo "  Rebuild it manually, or switch to the published image with:" >&2
-        echo "    sudo bootc switch ghcr.io/theblack-don/kineticos:default" >&2
+        echo "    sudo bootc switch ghcr.io/weecraglinux/kragnetic:default" >&2
         exit 1
     }
     dcli_args=(update)
@@ -132,7 +132,7 @@ if [[ "$transport" == "containers-storage" ]]; then
 fi
 
 # Registry-tracked image: pull the published image.
-echo "Updating KineticOS from the registry ..."
+echo "Updating Kragnetic from the registry ..."
 echo "    ${image_ref:-unknown}"
 echo
 

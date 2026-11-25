@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Usage: ./build-iso-nix.sh [variant]
 #
-# Builds an Anaconda installer ISO for KineticOS.
+# Builds an Anaconda installer ISO for Kragnetic.
 # Variants: default (AMD/Intel), nvidia (NVIDIA open driver) and
 # nvidia-legacy (NVIDIA proprietary driver, older GPUs).
 # Local only — lands in ./output/ and stays there.
@@ -14,9 +14,9 @@ VARIANT="${1:-${VARIANT:-default}}"
 # The registry tag matches the variant unless TAG is overridden.
 TAG="${TAG:-$VARIANT}"
 
-IMAGE_NAME="${IMAGE_NAME:-kineticos}"
+IMAGE_NAME="${IMAGE_NAME:-kragnetic}"
 BIB_IMAGE="${BIB_IMAGE:-quay.io/centos-bootc/bootc-image-builder:latest}"
-REGISTRY="${REGISTRY:-ghcr.io/theblack-don}"
+REGISTRY="${REGISTRY:-ghcr.io/weecraglinux}"
 # bootc-image-builder needs the target root filesystem when the source image
 # does not declare one. The kickstart installs to btrfs, so default to that.
 ROOTFS="${ROOTFS:-btrfs}"
@@ -25,15 +25,15 @@ cd "$(dirname "$0")"
 
 # The kickstart points the installed system at the matching registry tag, so
 # each variant uses its own config and output name:
-#   default        -> kineticos-<date>.iso          (iso-kineticos.toml)
-#   nvidia         -> kineticos-nvidia-<date>.iso   (iso-kineticos-nvidia.toml)
-#   nvidia-legacy  -> kineticos-nvidia-legacy-<date>.iso
+#   default        -> kragnetic-<date>.iso          (iso-kineticos.toml)
+#   nvidia         -> kragnetic-nvidia-<date>.iso   (iso-kineticos-nvidia.toml)
+#   nvidia-legacy  -> kragnetic-nvidia-legacy-<date>.iso
 if [[ "$VARIANT" == "default" ]]; then
   VARIANT_CONFIG="$(pwd)/disk_config/iso-kineticos.toml"
-  ISO_STEM="kineticos"
+  ISO_STEM="kragnetic"
 else
   VARIANT_CONFIG="$(pwd)/disk_config/iso-kineticos-${VARIANT}.toml"
-  ISO_STEM="kineticos-${VARIANT}"
+  ISO_STEM="kragnetic-${VARIANT}"
 fi
 CONFIG="${CONFIG:-$VARIANT_CONFIG}"
 mkdir -p output

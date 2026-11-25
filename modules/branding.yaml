@@ -1,4 +1,4 @@
-description: Brand the image as KineticOS in os-release
+description: Brand the image as Kragnetic in os-release
 scripts:
   post: |
     # bootc-image-builder derives the installer/ISO identity — the ISO boot
@@ -14,19 +14,19 @@ scripts:
     # (usr/share/pixmaps + hicolor/256x256) by the overlay module.
     . /usr/lib/os-release
     sed -i \
-      -e 's/^NAME=.*/NAME="KineticOS"/' \
-      -e 's/^PRETTY_NAME=.*/PRETTY_NAME="KineticOS"/' \
-      -e 's/^VARIANT=.*/VARIANT="KineticOS"/' \
-      -e 's/^VERSION_CODENAME=.*/VERSION_CODENAME="KineticOS"/' \
-      -e 's/(Kinoite)/(KineticOS)/' \
-      -e 's/^DEFAULT_HOSTNAME=.*/DEFAULT_HOSTNAME="kineticos"/' \
-      -e 's/^BOOTLOADER_NAME=.*/BOOTLOADER_NAME="KineticOS"/' \
+      -e 's/^NAME=.*/NAME="Kragnetic"/' \
+      -e 's/^PRETTY_NAME=.*/PRETTY_NAME="Kragnetic"/' \
+      -e 's/^VARIANT=.*/VARIANT="Kragnetic"/' \
+      -e 's/^VERSION_CODENAME=.*/VERSION_CODENAME="Kragnetic"/' \
+      -e 's/(Kinoite)/(Kragnetic)/' \
+      -e 's/^DEFAULT_HOSTNAME=.*/DEFAULT_HOSTNAME="kragnetic"/' \
+      -e 's/^BOOTLOADER_NAME=.*/BOOTLOADER_NAME="Kragnetic"/' \
       -e 's/^LOGO=.*/LOGO=kineticos-logo/' \
-      -e 's|^HOME_URL=.*|HOME_URL="https://gitlab.com/theblackdon/kineticos"|' \
-      -e 's|^DOCUMENTATION_URL=.*|DOCUMENTATION_URL="https://gitlab.com/theblackdon/kineticos"|' \
-      -e 's|^SUPPORT_URL=.*|SUPPORT_URL="https://gitlab.com/theblackdon/kineticos"|' \
-      -e 's|^BUG_REPORT_URL=.*|BUG_REPORT_URL="https://gitlab.com/theblackdon/kineticos/-/issues"|' \
-      -e "s|^CPE_NAME=.*|CPE_NAME=\"cpe:/o:kineticos:kineticos:${VERSION_ID}\"|" \
+      -e 's|^HOME_URL=.*|HOME_URL="https://github.com/WeeCragLinux/Kragnetic"|' \
+      -e 's|^DOCUMENTATION_URL=.*|DOCUMENTATION_URL="https://github.com/WeeCragLinux/Kragnetic"|' \
+      -e 's|^SUPPORT_URL=.*|SUPPORT_URL="https://github.com/WeeCragLinux/Kragnetic"|' \
+      -e 's|^BUG_REPORT_URL=.*|BUG_REPORT_URL="https://github.com/WeeCragLinux/Kragnetic/issues"|' \
+      -e "s|^CPE_NAME=.*|CPE_NAME=\"cpe:/o:kragnetic:kragnetic:${VERSION_ID}\"|" \
       /usr/lib/os-release
 
     # Drop Bazzite's glow-rendered welcome banner (ujust/brew tips) so fresh

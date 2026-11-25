@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# KineticOS: print the running image reference for fastfetch's "Image" line.
+# Kragnetic: print the running image reference for fastfetch's "Image" line.
 # bootc is authoritative on bootc systems; rpm-ostree is the ostree fallback.
 set -u
 
@@ -23,4 +23,4 @@ for prefix in \
   ref="${ref#"${prefix}"}"
 done
 
-printf '%s\n' "${ref:-KineticOS}"
+printf '%s\n' "${ref:-Kragnetic}"

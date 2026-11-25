@@ -16,7 +16,7 @@ OVERLAY_BASE=/var/lib/kineticos/overlay
 STAMP="$OVERLAY_BASE/.synced-image"
 RECORD="$OVERLAY_BASE/installed.txt"
 
-log() { echo "kineticos-overlay-sync: $*"; }
+log() { echo "kragnetic-overlay-sync: $*"; }
 
 # Booted bootc system only.
 [[ -e /run/ostree-booted ]] || exit 0

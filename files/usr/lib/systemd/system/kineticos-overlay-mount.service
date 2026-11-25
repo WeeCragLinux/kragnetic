@@ -1,6 +1,6 @@
 [Unit]
-Description=kineticos persistent overlay on /usr
-Documentation=https://gitlab.com/theblackdon/kineticos
+Description=Kragnetic persistent overlay on /usr
+Documentation=https://github.com/WeeCragLinux/Kragnetic
 # Runs very early so every later service sees the overlaid /usr (incl. the
 # rpmdb in /usr/share/rpm). Must not carry default dependencies (those would
 # pull it after basic.target).
